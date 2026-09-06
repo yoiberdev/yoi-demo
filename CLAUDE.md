@@ -1,5 +1,8 @@
 # yoi-demo — reglas para la IA
 
+- La web personal yoiber.com (repo `yoiberdev/yoiber.com`) tiene su propio logo animado con GSAP.
+  **No se sustituye ni se porta a Anime.js**: es difícil de replicar y Yoiber quiere conservarlo.
+  Lo que se aprenda aquí no se lleva allí salvo que él lo pida.
 - Repositorio propio `yoiberdev/yoi-demo` (público, rama `main`). Salió de una rama huérfana del
   repositorio de la web personal el 2026-09-06; no comparte código con `yoiberdev/yoiber.com` y no
   toca otros proyectos del servidor.
