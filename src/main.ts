@@ -4,7 +4,7 @@ import { animate, createScope, type JSAnimation, type Scope } from 'animejs';
 import { P } from './params';
 import { crearMaestro, tramoActual } from './core/maestro';
 import { crearScroller, type Proxy } from './core/scroller';
-import { montarEscenario } from './core/escenario';
+import { montarEscena } from './core/escena';
 import { montarTema } from './core/tema';
 import { montarSubnav } from './core/subnav';
 import { montarDebug } from './core/debug';
@@ -24,11 +24,19 @@ function ajustarAlturas(): void {
 function montar(self?: Scope): () => void {
   const reduce = self?.matches.reduceMotion === true;
   const m = crearMaestro();
+  const proxy: Proxy = { currentTime: 0 };
   const intro = montarIntro(m, reduce);
-  montarEscenario(m, reduce);
+  // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. El relevo pide
+  // el trozo diferido él solo; aquí no se espera a nada. Ver core/escena.ts.
+  // El reloj que lee el motor 3D es el del PROPIO MAESTRO, no `proxy`. Son el mismo número casi
+  // siempre, pero `proxy` solo es fiable justo después de un tic de scroll: al redimensionar,
+  // `scroller.refrescar()` reconstruye la línea de tiempo y el maestro se queda en su etiqueta
+  // mientras `proxy` conserva el valor viejo. Con el escenario CSS eso no se notaba (nadie lee
+  // `proxy` por fotograma); el motor lo lee 60 veces por segundo para el temblor, el parpadeo del
+  // penacho y las vueltas de la turbina, y ahí se veía el salto.
+  const escena = montarEscena(m, { reduce, tiempo: () => m.tl.currentTime });
   m.tl.init();
 
-  const proxy: Proxy = { currentTime: 0 };
   const rotuloNombre = document.querySelector<HTMLElement>('#capitulo-nombre');
   const rotuloProgreso = document.querySelector<HTMLElement>('#capitulo-progreso');
   let introTemporal: JSAnimation | null = null;
@@ -51,7 +59,7 @@ function montar(self?: Scope): () => void {
     subnav.actualizar(scroller.progreso());
   });
   const subnav = montarSubnav(scroller);
-  const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy) : null;
+  const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy, escena) : null;
 
   if (reduce || window.scrollY > 1) {
     // Recarga a mitad de página o movimiento reducido: sin intro por tiempo.
@@ -81,6 +89,7 @@ function montar(self?: Scope): () => void {
     temporizador = window.setTimeout(() => {
       ajustarAlturas();
       scroller.refrescar();
+      m.tl.seek(proxy.currentTime);   // refrescar() reconstruye y deja el maestro en 0: se repone
     }, 250);
   };
   window.addEventListener('resize', alRedimensionar);
@@ -90,6 +99,7 @@ function montar(self?: Scope): () => void {
     window.clearTimeout(temporizador);
     introTemporal?.revert();
     quitarDebug?.();
+    escena.revertir();
     tema.revertir();
     subnav.revertir();
     scroller.revertir();

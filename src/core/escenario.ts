@@ -1,11 +1,16 @@
 import { stagger } from 'animejs';
 import { P } from '../params';
 import type { Maestro } from './maestro';
+import type { Escena } from './escena';
 
 // Escenario CSS 3D: un panel de placas apiladas en translateZ que entra, gira, se abre y se hunde
 // según el tramo del maestro. Con reduced-motion solo hay fundidos.
-export function montarEscenario(m: Maestro, reduce: boolean): void {
+// Cumple el contrato `Escena` (core/escena.ts) para poder relevarse con el motor 3D. Su
+// `revertir()` no tiene nada que soltar: no crea nodos ni escuchadores, y sus animaciones son
+// hijas del maestro, así que las deshace el `m.tl.revert()` de main.ts.
+export function montarEscenario(m: Maestro, reduce: boolean): Escena {
   const { tl } = m;
+  const escena: Escena = { tipo: 'css', revertir: () => undefined };
   const panel = '#panel';
   const placas = '.placa';
   const puntos = '.galeria-punto';
@@ -17,7 +22,7 @@ export function montarEscenario(m: Maestro, reduce: boolean): void {
       .add(panel, { opacity: 1, duration: m.duracion('HERO_OUT'), ease: 'linear' }, 'HERO_OUT')
       .add(puntos, { opacity: 1, scale: 1, duration: 400 }, stagger(1000, { start: 'GALERIA' }))
       .add(panel, { opacity: 0, duration: m.duracion('CIERRE'), ease: 'linear' }, 'CIERRE');
-    return;
+    return escena;
   }
 
   const e = P.panel.entrada;
@@ -40,4 +45,6 @@ export function montarEscenario(m: Maestro, reduce: boolean): void {
     .add(panel, { rotateX: 0, rotateY: 0, duration: 1500 }, 'COMO+=3500')
     // Cierre: se hunde bajo el horizonte.
     .add(panel, { rotateX: P.panel.cierre.rotateX, y: P.panel.cierre.y, opacity: 0, duration: m.duracion('CIERRE'), ease: 'in(2)' }, 'CIERRE');
+
+  return escena;
 }

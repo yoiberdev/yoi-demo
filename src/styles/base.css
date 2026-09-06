@@ -60,6 +60,26 @@ h1 {
 #bajar { display: inline-block; margin-top: 1.5rem; font-size: 0.85rem; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
 #bajar:focus-visible { outline: 2px solid var(--acento); outline-offset: 4px; }
 
+/* Motor 3D (WebGL) y relevo con el escenario CSS.
+   El cruce lo hace el CSS, no Anime.js: son dos opacidades y no tienen por qué pasar por el reloj
+   del maestro. Duración igual a P.motor.relevo (420 ms). */
+#motor {
+  position: fixed; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.42s ease-in-out;
+  contain: strict;            /* el lienzo no puede provocar reflujo del resto de la página */
+}
+#motor .motor-lienzo { display: block; width: 100%; height: 100%; }
+html.motor-on #motor { opacity: 1; }
+html.motor-on #stage { opacity: 0; }
+#stage { transition: opacity 0.42s ease-in-out; }
+@media (prefers-reduced-motion: reduce) {
+  /* Cinturón y tirantes: aunque nunca se pide el trozo 3D con movimiento reducido, si alguien lo
+     fuerza con ?motor=3d el cruce no parpadea. */
+  #motor, #stage { transition: none; }
+}
+
 /* Escenario 3D */
 #stage { position: fixed; inset: 0; pointer-events: none; perspective: calc(100vh * 1.37); perspective: calc(100lvh * 1.37); overflow: hidden; }
 #stage .world { position: absolute; inset: 0; display: grid; place-items: center; transform-style: preserve-3d; }
@@ -114,4 +134,33 @@ h1 {
   body { scroll-behavior: auto; }
   #titulo .char, #panel { will-change: auto; }
   #subnav, html, body, .placa, #debug { transition: none; }
+}
+
+/* Rótulos del despiece. Van DENTRO de #motor (mismo contenedor que el lienzo), así que heredan
+   su pointer-events: none y su cruce de opacidad. La capa se oculta con [hidden] cuando ningún
+   rótulo está abierto: cero trabajo de composición fuera del capítulo COMO. */
+.motor-rotulos { position: absolute; inset: 0; }
+/* Contenido que solo leen los lectores de pantalla (la lista de piezas del capítulo COMO). */
+.solo-lectores {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.motor-guias { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.motor-guias polyline { fill: none; stroke: var(--line); stroke-width: 1; }
+.motor-guias circle { fill: var(--acento); }
+.motor-rotulo {
+  position: absolute; top: 0; left: 0; max-width: 12rem; opacity: 0;
+  /* Sin letter-spacing: a 0,78 rem el ajuste extra rompía palabras ("radiad ores", "vo luta"). */
+  font-size: 0.78rem; line-height: 1.3; letter-spacing: normal; font-kerning: normal;
+  will-change: transform, opacity;
+}
+.motor-rotulo.lado-der { text-align: right; }
+.motor-rotulo b { display: block; color: var(--fg); font-weight: 600; }
+.motor-rotulo span { display: block; color: var(--muted-2); }
+@media (max-width: 899px) {
+  /* En compacto los rótulos van en dos bandas, arriba y abajo, no en columnas: hay ancho de sobra
+     para el título completo y ninguno se sale por el borde. */
+  .motor-rotulo { max-width: 60vw; font-size: 0.72rem; }
+  .motor-rotulo span { display: none; }
+  .motor-rotulos.compacto .motor-rotulo.lado-der { text-align: left; }
 }
