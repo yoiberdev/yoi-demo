@@ -1,7 +1,8 @@
-# yoi-demo (rama demo-anime) — reglas para la IA
+# yoi-demo — reglas para la IA
 
-- Esta rama es un experimento aislado. **Nunca** mezclar con `main` ni tocar la web de yoiber.com.
-  No toca otros proyectos del servidor ni `/opt/docs`.
+- Repositorio propio `yoiberdev/yoi-demo` (público, rama `main`). Salió de una rama huérfana del
+  repositorio de la web personal el 2026-09-06; no comparte código con `yoiberdev/yoiber.com` y no
+  toca otros proyectos del servidor.
 - Todo se ejecuta como usuario `yoiber` (`runuser -u yoiber -- …`) salvo `git push`, que hace root
   con el alias `github-yoiberdev`; después `chown -R yoiber:yoiber .git`.
 - No hay Node en el host: `npm` siempre dentro de `node:22-alpine` (ver README y docker-compose.dev.yml).
@@ -24,4 +25,4 @@
   (plan, inventario del sitio, ficheros descargados). No se versiona ni se copia al repo.
 - La CSP de `nginx.conf` lleva el hash del script de cabecera de `index.html`: si cambia ese script,
   recalcular `printf %s "<contenido>" | openssl dgst -sha256 -binary | base64`.
-- Publicar: `sudo /opt/yoi-demo/actualizar.sh` (pull + build + up). Dominio: demo.yoiber.com.
+- Publicar: `sudo /opt/yoi-demo/actualizar.sh` (pull + build + up). Dominios: demo.yoiber.com y demo.yoiber.dev.
