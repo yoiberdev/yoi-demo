@@ -5,6 +5,9 @@
 - Todo se ejecuta como usuario `yoiber` (`runuser -u yoiber -- …`) salvo `git push`, que hace root
   con el alias `github-yoiberdev`; después `chown -R yoiber:yoiber .git`.
 - No hay Node en el host: `npm` siempre dentro de `node:22-alpine` (ver README y docker-compose.dev.yml).
+- Referencia de la librería, recetas y trampas: `/opt/docs/ANIMEJS.md` (portada con índice). Este
+  demo es el ejemplo de código del que salieron las recetas: si cambias un patrón aquí, mira si
+  hay que corregir `/opt/docs/ANIMEJS-RECETAS.md`.
 - Anime.js **4.5.0 exacto** (`.npmrc` con `save-exact`). Nunca `animejs@beta`.
 - Licencia: Anime.js es MIT. La web animejs.com no tiene licencia: no copiar markup, CSS, `d=` de
   SVG, textos, modelos ni fuentes. Se reproducen técnicas con diseño propio.
