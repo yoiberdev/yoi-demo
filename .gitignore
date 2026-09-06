@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+qa/salida/
+qa/ref/
+qa/node_modules/
+*.log
