@@ -2,6 +2,7 @@
   --bg: #000;
   --fg: #f4f4f2;
   --muted: #8a8a86;
+  --muted-2: #7c7c78; /* 5.0:1 sobre negro, cumple AA en texto pequeño */
   --acento: #ffd166;
   color-scheme: dark;
 }
@@ -14,7 +15,8 @@ body {
   display: grid;
   place-items: center;
 }
-/* Oculto solo si el módulo JS arrancó (clase .js) y las fuentes aún no están listas. */
+/* Oculto solo si hay JS (clase .js puesta por el script de cabecera) y las fuentes aún no están listas;
+   el mismo script destapa a los 2,5 s aunque el módulo falle. */
 html.js:not(.is-ready) .intro { visibility: hidden; }
 .intro { text-align: center; padding: 2rem; }
 h1 {
@@ -37,7 +39,7 @@ h1 {
   transform-origin: center;
 }
 #lema { margin: 1.25rem 0 0; font-size: clamp(1rem, 2.2vw, 1.4rem); color: var(--muted); }
-#nota { margin: 2.5rem 0 0; font-size: 0.85rem; color: var(--muted); opacity: 0.7; }
+#nota { margin: 2.5rem 0 0; font-size: 0.85rem; color: var(--muted-2); }
 @media (prefers-reduced-motion: reduce) {
   #titulo .char { will-change: auto; }
 }

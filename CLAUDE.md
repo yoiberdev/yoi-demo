@@ -17,4 +17,8 @@
   `loop: 1` son dos iteraciones; `play()` siempre hacia delante (`resume()` para continuar);
   para sincronizar timelines usar `.add(tl, { progress: [0, 1], duration })`, no `.sync(tl)`;
   `engine.pause()` congela también el scroll, pausar solo los bucles decorativos.
+- Notas de planificación y material de referencia fuera del repo: `/home/yoiber/yoi-demo-privado/`
+  (plan, inventario del sitio, ficheros descargados). No se versiona ni se copia al repo.
+- La CSP de `nginx.conf` lleva el hash del script de cabecera de `index.html`: si cambia ese script,
+  recalcular `printf %s "<contenido>" | openssl dgst -sha256 -binary | base64`.
 - Publicar: `sudo /opt/yoi-demo/actualizar.sh` (pull + build + up). Dominio: demo.yoiber.com.
