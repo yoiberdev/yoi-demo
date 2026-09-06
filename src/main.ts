@@ -1,67 +1,105 @@
 import '@fontsource-variable/space-grotesk';
 import './styles/base.css';
-import { animate, createScope, splitText, stagger, spring, utils, type JSAnimation, type Scope } from 'animejs';
+import { animate, createScope, type JSAnimation, type Scope } from 'animejs';
 import { P } from './params';
+import { crearMaestro, tramoActual } from './core/maestro';
+import { crearScroller, type Proxy } from './core/scroller';
+import { montarEscenario } from './core/escenario';
+import { montarTema } from './core/tema';
+import { montarSubnav } from './core/subnav';
+import { montarDebug } from './core/debug';
+import { montarIntro } from './effects/intro';
 
-// Contrato de cada efecto: se monta dentro del scope y devuelve una limpieza.
-// El scope la ejecuta al revertir (por ejemplo, cuando cambia prefers-reduced-motion) y vuelve a montar.
-function montarIntro(self?: Scope): (() => void) | void {
-  const reduce = self?.matches.reduceMotion === true;
-  const titulo = document.querySelector<HTMLElement>('#titulo');
-  const punto = document.querySelector<HTMLElement>('#punto');
-  const lema = document.querySelector<HTMLElement>('#lema');
-  const nota = document.querySelector<HTMLElement>('#nota');
-  if (!titulo || !punto || !lema || !nota) return;
+const NOMBRES: Record<string, string> = { INTRO: 'intro', HERO_OUT: 'intro', GALERIA: 'galería', COMO: 'cómo está hecho', CIERRE: 'cierre' };
 
-  const split = splitText(titulo, { words: false, chars: { class: 'char' } });
-  let pulso: JSAnimation | null = null;
-  const limpiar = (): void => {
-    pulso?.revert();
-    pulso = null;
-    split.revert();
-  };
-
-  if (reduce) {
-    utils.set([...split.chars, punto, lema, nota], { opacity: 1, x: 0, y: 0, scale: 1 });
-    return limpiar;
+// Las secciones son espaciadores: su altura fija cuánto scroll dura cada tramo.
+function ajustarAlturas(): void {
+  for (const s of document.querySelectorAll<HTMLElement>('section[data-label]')) {
+    const alturas = P.scroll.alturas[s.dataset.label ?? ''] ?? 1;
+    s.style.height = `${alturas * 100}vh`;
+    s.style.height = `${alturas * 100}lvh`;
   }
-
-  utils.set(punto, { scale: 0 });
-  utils.set([lema, nota], { opacity: 0, y: 12 });
-
-  animate(split.chars, {
-    x: P.intro.chars.x,
-    opacity: [0, 1],
-    duration: P.intro.chars.duration,
-    ease: P.intro.chars.ease,
-    delay: stagger(P.intro.chars.stagger, { ease: P.intro.chars.staggerEase }),
-  });
-
-  animate(punto, {
-    scale: [0, 1],
-    delay: P.intro.punto.delay,
-    ease: spring({ stiffness: P.intro.punto.stiffness, damping: P.intro.punto.damping }),
-    onComplete: () => {
-      // Bucle decorativo: se guarda para poder revertirlo (o pausarlo) con el resto del efecto.
-      pulso = animate(punto, { scale: [1, 1.18], duration: 1200, alternate: true, loop: true, ease: 'inOutSine' });
-    },
-  });
-
-  animate([lema, nota], {
-    opacity: 1,
-    y: 0,
-    duration: 800,
-    ease: 'out(3)',
-    delay: stagger(P.intro.lema.stagger, { start: P.intro.lema.delay }),
-  });
-
-  return limpiar;
 }
 
-// Espera a las fuentes para que splitText mida bien; el script de cabecera tiene un tope de seguridad.
+function montar(self?: Scope): () => void {
+  const reduce = self?.matches.reduceMotion === true;
+  const m = crearMaestro();
+  const intro = montarIntro(m, reduce);
+  montarEscenario(m, reduce);
+  m.tl.init();
+
+  const proxy: Proxy = { currentTime: 0 };
+  const rotuloNombre = document.querySelector<HTMLElement>('#capitulo-nombre');
+  const rotuloProgreso = document.querySelector<HTMLElement>('#capitulo-progreso');
+  let introTemporal: JSAnimation | null = null;
+
+  const pintarRotulo = (): void => {
+    const { tramo, progreso } = tramoActual(m, proxy.currentTime);
+    if (rotuloNombre) rotuloNombre.textContent = NOMBRES[tramo] ?? tramo;
+    if (rotuloProgreso) rotuloProgreso.textContent = tramo === 'GALERIA' ? `${Math.min(8, Math.floor(progreso * 8) + 1)} / 8` : '';
+  };
+
+  const tema = montarTema(m);
+  const scroller = crearScroller(m, proxy, () => {
+    if (introTemporal && !introTemporal.completed) {
+      if (window.scrollY < 2) return; // el scroller aún no manda: la intro sigue por tiempo
+      introTemporal.pause(); // el usuario hizo scroll durante la intro: el scroll toma el mando
+    }
+    m.tl.seek(proxy.currentTime);
+    tema.actualizar(proxy.currentTime);
+    pintarRotulo();
+    subnav.actualizar(scroller.progreso());
+  });
+  const subnav = montarSubnav(scroller);
+  const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy) : null;
+
+  if (reduce || window.scrollY > 1) {
+    // Recarga a mitad de página o movimiento reducido: sin intro por tiempo.
+    proxy.currentTime = m.L.INTRO_END;
+    m.tl.seek(m.L.INTRO_END);
+    tema.actualizar(proxy.currentTime);
+  } else {
+    introTemporal = animate(proxy, {
+      currentTime: [m.L.INTRO, m.L.INTRO_END],
+      duration: P.scroll.introDuration,
+      ease: 'linear',
+      onUpdate: () => {
+        m.tl.seek(proxy.currentTime);
+        pintarRotulo();
+      },
+      onComplete: () => {
+        const pulso = intro.arrancarPulso();
+        if (pulso && self) (self.data.loops ??= new Set()).add(pulso);
+      },
+    });
+  }
+  pintarRotulo();
+
+  let temporizador = 0;
+  const alRedimensionar = (): void => {
+    window.clearTimeout(temporizador);
+    temporizador = window.setTimeout(() => {
+      ajustarAlturas();
+      scroller.refrescar();
+    }, 250);
+  };
+  window.addEventListener('resize', alRedimensionar);
+
+  return () => {
+    window.removeEventListener('resize', alRedimensionar);
+    window.clearTimeout(temporizador);
+    introTemporal?.revert();
+    quitarDebug?.();
+    tema.revertir();
+    subnav.revertir();
+    scroller.revertir();
+    intro.revertir();
+    m.tl.revert();
+  };
+}
+
 document.fonts.ready.then(() => {
+  ajustarAlturas();
   document.documentElement.classList.add('is-ready');
-  createScope({
-    mediaQueries: { reduceMotion: '(prefers-reduced-motion: reduce)' },
-  }).add(montarIntro);
+  createScope({ mediaQueries: { reduceMotion: '(prefers-reduced-motion: reduce)' } }).add(montar);
 });

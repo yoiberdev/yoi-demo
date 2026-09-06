@@ -11,11 +11,47 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   </head>
   <body>
-    <main class="intro" id="intro" data-chapter="intro">
-      <h1><span id="titulo">yoiber</span><span id="punto" aria-hidden="true"></span></h1>
-      <p id="lema">Demo de animaciones con Anime.js 4.5.0</p>
-      <p id="nota">Rama demo-anime · en construcción · no comparte código con yoiber.com</p>
-    </main>
+    <div id="stage" aria-hidden="true">
+      <div class="world">
+        <div id="panel">
+          <div class="placa placa-1"></div>
+          <div class="placa placa-2"></div>
+          <div class="placa placa-3"></div>
+          <div class="placa placa-4"></div>
+          <div class="placa placa-5"></div>
+          <div class="galeria-puntos">
+            <span class="galeria-punto"></span><span class="galeria-punto"></span><span class="galeria-punto"></span><span class="galeria-punto"></span>
+            <span class="galeria-punto"></span><span class="galeria-punto"></span><span class="galeria-punto"></span><span class="galeria-punto"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <header id="hero" class="capa">
+      <div class="intro">
+        <h1><span id="titulo">yoiber</span><span id="punto" aria-hidden="true"></span></h1>
+        <p id="lema">Demo de animaciones con Anime.js 4.5.0</p>
+        <p id="nota">Rama demo-anime · en construcción · no comparte código con yoiber.com</p>
+        <a id="bajar" href="#galeria">desliza para ver la galería ↓</a>
+      </div>
+    </header>
+
+    <div id="capitulos">
+      <section id="intro" data-label="HERO_OUT" data-chapter="intro"></section>
+      <section id="galeria" data-label="GALERIA" data-chapter="galeria"></section>
+      <section id="como" data-label="COMO" data-chapter="como" data-theme="light"></section>
+      <section id="cierre" data-label="CIERRE" data-chapter="cierre"></section>
+    </div>
+
+    <div id="rotulo" class="capa" aria-live="polite">
+      <span id="capitulo-nombre"></span>
+      <span id="capitulo-progreso"></span>
+    </div>
+
+    <nav id="subnav" aria-label="Progreso de la página">
+      <div class="barra"><div class="cursor" role="slider" aria-label="Posición en la página" tabindex="0"></div></div>
+    </nav>
+
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
