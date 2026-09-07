@@ -88,6 +88,17 @@ export const M: Ajustes = {
     segmentosV: 8,
   },
   // Estructura de empuje: anillo + tirantes en A.
+  // TORNILLERIA. Lo que hace que una maquina se lea como compleja no son mas piezas grandes, sino
+  // detalle pequeno repetido. Cabeza hexagonal (un cilindro de 6 segmentos ES un hexagono) y todas
+  // las coronas en UNA InstancedMesh: una sola llamada de dibujo para las tres bridas.
+  tornillos: {
+    r: 0.045,        // radio de la cabeza
+    alto: 0.040,     // lo que sobresale de la brida
+    nCamara: 18,     // brida de arriba de la camara, donde monta el inyector
+    nBancada: 12,    // uno por tirante del anillo de empuje
+    nBomba: 8,       // brida de la turbobomba
+  },
+
   bancada: {
     rAnillo: 1.15,
     rTuboAnillo: 0.075,
@@ -196,6 +207,7 @@ type Ajustes = {
   turbobomba: { azimut: number; radio: number; altura: number; rVoluta: number; rTuboVoluta: number;
     rCuerpo: number; largoCuerpo: number; rTurbina: number; largoTurbina: number; rEntrada: number;
     largoEntrada: number; segmentos: number };
+  tornillos: { r: number; alto: number; nCamara: number; nBancada: number; nBomba: number };
   conductos: { radios: number[]; segmentosU: number; segmentosV: number };
   bancada: { rAnillo: number; rTuboAnillo: number; altura: number; tirantes: number; rTirante: number;
     anclaje: number; yAnclaje: number };
@@ -709,6 +721,42 @@ function construirConductos(mat: Materiales): Group {
   return g;
 }
 
+// Tres coronas de tornillos en las bridas reales del motor. Van juntas en una sola InstancedMesh
+// porque comparten material: 3 anillos, 38 tornillos, 1 llamada de dibujo.
+function construirTornillos(mat: Materiales): Group {
+  const t = M.tornillos;
+  const g = nombrar(new Group(), 'tornillos');
+  const perfil = perfilCamara();
+  const yAlto = perfil[perfil.length - 1].y;   // el mismo anclaje que usan los zunchos
+
+  // Las cabezas tienen que SOBRESALIR de una superficie visible. Puestas en el eje de la pieza
+  // quedan enterradas dentro de ella y no se ven: pasó con el anillo de empuje, donde el eje del
+  // toro está a rTuboAnillo de la superficie.
+  const anillos: { y: number; radio: number; n: number }[] = [
+    // brida de arriba de la cámara: las cabezas asoman por el canto del cilindro
+    { y: yAlto + t.alto * 0.5, radio: M.camara.rCamara + M.camara.espesor * 0.5, n: t.nCamara },
+    // anillo de empuje: encima del tubo, no dentro
+    { y: M.bancada.altura + M.bancada.rTuboAnillo + t.alto * 0.4, radio: M.bancada.rAnillo, n: t.nBancada },
+    // brida de la turbobomba: por fuera del cuerpo
+    { y: M.turbobomba.altura, radio: M.turbobomba.rCuerpo + t.r * 0.8, n: t.nBomba },
+  ];
+
+  const total = anillos.reduce((a, x) => a + x.n, 0);
+  const cabeza = new CylinderGeometry(t.r, t.r, t.alto, 6);
+  const tornillos = new InstancedMesh(cabeza, mat.oscuro, total);
+  const m = new Matrix4();
+  let k = 0;
+  for (const a of anillos) {
+    for (let i = 0; i < a.n; i++) {
+      const th = (i / a.n) * Math.PI * 2;
+      tornillos.setMatrixAt(k++, m.makeTranslation(a.radio * Math.cos(th), a.y, a.radio * Math.sin(th)));
+    }
+  }
+  tornillos.instanceMatrix.needsUpdate = true;
+  g.add(nombrar(tornillos, 'tornillos-cabezas'));
+  return g;
+}
+
 function construirBancada(mat: Materiales): Group {
   const b = M.bancada;
   const g = nombrar(new Group(), 'bancada');
@@ -1070,6 +1118,7 @@ export function crearMotor(): Motor {
   periferia.add(construirTurbobomba(materiales), construirConductos(materiales), construirRadiadores(materiales), construirPlaca(materiales));
 
   const bancada = construirBancada(materiales);
+  bancada.add(construirTornillos(materiales));
   grupo.add(propulsor, periferia, bancada);
   anadirAristas(grupo, materiales);
   anadirSiluetas(grupo, materiales);
