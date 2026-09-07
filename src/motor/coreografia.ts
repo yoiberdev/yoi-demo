@@ -50,7 +50,7 @@ export interface Estado {
 
 export interface Coreografia {
   estado: Estado;
-  aplicar(tiempo: number): void;
+  aplicar(tiempo: number, ahora: number): void;
   revertir(): void;
   /** Todo lo que la timeline ha tocado: la limpieza lo saca de Anime.js con utils.remove(). */
   objetivos: object[];
@@ -339,7 +339,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   const chapaMarca = new Set<Material>(rig.chapaMarca);
   let alfa = false;   // ¿están los cuerpos en la pasada transparente ahora mismo?
 
-  function aplicar(tiempo: number): void {
+  function aplicar(tiempo: number, ahora: number): void {
     // 1. La corona. Las 36 matrices salen de los 36 escalares que mueve la timeline.
     rig.escribirTubos();
 
@@ -351,9 +351,12 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       0,
     );
     rig.sacudida.rotation.z = v * 0.35 * Math.sin(tiempo * PM.coreo.cierre.vibraHz * 2.3);
+    // 2b. LA DERIVA. Balanceo lentísimo con el reloj del NAVEGADOR: es lo único que se mueve cuando
+    //     el visitante deja de bajar. Mismo grupo que el temblor y también escrito en absoluto.
+    rig.sacudida.rotation.y = PM.vida.derivaAmp * Math.sin(ahora * PM.vida.derivaHz);
 
     // 3. La turbobomba coge vueltas. Ángulo = f(tiempo), no un contador que se incrementa.
-    rig.turbina.rotation.y = estado.rpm * tiempo * PM.coreo.cierre.rpm;
+    rig.turbina.rotation.y = estado.rpm * tiempo * PM.coreo.cierre.rpm + ahora * PM.vida.turbinaIdle;
 
     // 3b. EL DESVÍO DE LA GALERÍA. Se escribe en absoluto sobre un grupo que ningún tween toca, y
     //     se calcula CADA FOTOGRAMA porque depende del encuadre: la cámara ortográfica fija el
@@ -427,6 +430,12 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       rig.emisivos[i].emissiveIntensity =
         (base + estado.pulso * (PM.coreo.galeria.emisivo - base) + estado.brillo * (PM.coreo.cierre.emisiva - base)) * fuera;
     }
+    // 6b. El ámbar respira, también con el reloj del navegador. Va multiplicando lo que acaba de
+    //     escribir la coreografía, no sustituyéndolo: el latido de la galería y el rojo del
+    //     encendido siguen mandando, y esto solo les añade un vaivén para que nunca esté quieto.
+    const respira = 1 + PM.vida.latidoAmp * Math.sin(ahora * PM.vida.latidoHz);
+    for (let i = 0; i < rig.emisivos.length; i++) rig.emisivos[i].emissiveIntensity *= respira;
+
     // el inserto de garganta es MeshBasicMaterial (sin iluminar): en el encendido se pone al blanco
     rig.caliente.color.lerpColors(colorFrio, colorCaliente, MathUtils.clamp(estado.brillo, 0, 1));
     // La marca se AUTO-ILUMINA a medida que viene al frente: un logotipo no se sombrea, y además

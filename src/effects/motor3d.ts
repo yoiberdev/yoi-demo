@@ -196,7 +196,7 @@ export function montarMotor(ctx: ContextoMotor): Escena {
         // proyectan -> Three dibuja. Nunca al revés.
         engine.update();
         const t = tiempo();
-        coreo.aplicar(t);
+        coreo.aplicar(t, ahora);
         penacho.aplicar(coreo.estado, t);
         rotulos.aplicar();
         render.render(rig.escena, rig.camara);
@@ -365,7 +365,8 @@ export function montarMotor(ctx: ContextoMotor): Escena {
         /** Coloca el reloj del maestro donde se le diga y pinta ese fotograma, sin tocar el scroll. */
         seek(t: number): void {
           m.tl.seek(t);
-          coreo.aplicar(t);
+          // Pintado suelto desde las pruebas: la capa de vida usa el reloj real del momento.
+          coreo.aplicar(t, performance.now());
           penacho.aplicar(coreo.estado, t);
           rotulos.aplicar();
           render.render(rig.escena, rig.camara);

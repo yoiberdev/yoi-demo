@@ -62,6 +62,19 @@ export const PM = {
     { id: 'placa', y: 3.6, r: 0.6, ancla: [0, 0, 0], lado: 1, titulo: '', nota: '' },
   ] as PiezaNum[],
 
+  // LA CAPA DE VIDA. Va con el reloj del NAVEGADOR, no con el del maestro, y esa es toda la idea:
+  // la coreografía entera es función del scroll y por eso se deshace perfecta al subir, pero también
+  // por eso la página se queda helada en cuanto dejas de bajar. Esto es lo único que corre solo.
+  // No hace falta que sea reversible porque no va a ninguna parte: son ciclos que solo laten.
+  // Frecuencias en radianes por milisegundo (0,0002 rad/ms ~ 8,7 s de periodo).
+  vida: {
+    turbinaIdle: 0.00040,   // la turbobomba nunca está del todo parada
+    derivaAmp: 0.021,       // radianes (~1,2 grados) de balanceo del conjunto
+    derivaHz: 0.00021,      // ~30 s de ida y vuelta: se nota sin marear
+    latidoAmp: 0.30,        // cuánto respira el ámbar sobre su valor de la coreografía
+    latidoHz: 0.00110,      // ~5,7 s
+  },
+
   // Los tres paneles radiadores además se abren en abanico cada uno por su radio, dentro del grupo.
   abanicoRadiador: 1.35,
 
