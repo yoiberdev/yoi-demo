@@ -32,9 +32,11 @@ export function montarHero(m: Maestro, reduce: boolean): Hero {
   const lema = document.querySelector<HTMLElement>('#lema');
   const nota = document.querySelector<HTMLElement>('#nota');
   const bajar = document.querySelector<HTMLElement>('#bajar');
-  if (!velo || !lema || !nota || !bajar) return { revertir: () => undefined };
+  if (!velo) return { revertir: () => undefined };
 
-  const texto = [lema, nota, bajar];
+  // Los textos son opcionales: esta página es la web de Yoiber, no una demo, y el logo habla solo.
+  // Si algún día vuelve a haber subtítulo, basta con añadirlo al marcado y aquí se anima de nuevo.
+  const texto = [lema, nota, bajar].filter((e): e is HTMLElement => e !== null);
   const dur = m.duracion('HERO_OUT') * P.intro.salidaTexto;
 
   if (reduce) {
@@ -44,16 +46,20 @@ export function montarHero(m: Maestro, reduce: boolean): Hero {
   }
 
   const T = P.intro.texto;
-  tl.set(texto, { opacity: 0, y: T.y }, 0)
-    // El velo entra ANTES que el texto y con el logo: es el suelo sobre el que se lee todo lo demás.
-    .set(velo, { opacity: 0 }, 0)
+  // El velo entra ANTES que el texto y con el logo: es el suelo sobre el que se lee todo lo demás.
+  tl.set(velo, { opacity: 0 }, 0)
     .add(velo, { opacity: 1, duration: 1200, ease: 'linear' }, 'INTRO_ON')
-    .add(texto, {
-      opacity: 1, y: 0, duration: T.duration, ease: 'out(3)', delay: stagger(T.stagger),
-    }, `INTRO_ON+=${T.delay}`)
-    // HERO_OUT: el texto sube y se va mientras el motor toma el centro. El velo se va con él.
-    .add(texto, { y: -120, opacity: 0, duration: dur, ease: 'in(2)' }, 'HERO_OUT')
+    // HERO_OUT: el velo se va mientras el motor toma el centro.
     .add(velo, { opacity: 0, duration: dur, ease: 'in(2)' }, 'HERO_OUT');
+
+  // Hoy no hay subtítulo: el logo habla solo. Si vuelve a haberlo, se anima igual que antes.
+  if (texto.length) {
+    tl.set(texto, { opacity: 0, y: T.y }, 0)
+      .add(texto, {
+        opacity: 1, y: 0, duration: T.duration, ease: 'out(3)', delay: stagger(T.stagger),
+      }, `INTRO_ON+=${T.delay}`)
+      .add(texto, { y: -120, opacity: 0, duration: dur, ease: 'in(2)' }, 'HERO_OUT');
+  }
 
   // Nada que soltar: no hay nodos creados ni escuchadores, y los hijos del maestro los deshace el
   // `m.tl.revert()` de main.ts.
