@@ -83,7 +83,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
   let visible = false;
   // Cachés: escribir en el DOM solo cuando el valor cambia de verdad ahorra la mitad de las
   // escrituras durante el parallax, donde muchos rótulos están quietos en su ranura.
-  const ultimo = rig.piezas.map(() => ({ pts: '', tr: '', op: '', r: '' }));
+  const ultimo = rig.piezas.map(() => ({ pts: '', tr: '', op: '', r: '', og: '' }));
 
   // Única lectura de layout de todo el módulo, y solo al redimensionar.
   function medir(): void {
@@ -108,7 +108,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
     if (!visible) { capa.hidden = false; visible = true; }
 
     const porLado = Math.max(nIzq, nDer);
-    const mitad = Math.ceil(nCompacto / 2);
+    const mitad = Math.min(PM.rotulos.enBandaAlta, nCompacto);
     for (let i = 0; i < rig.piezas.length; i++) {
       const pieza = rig.piezas[i];
       const ranuraI = compacto ? ranuraCompacta[i] : ranura[i];
@@ -118,6 +118,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
         if (u.op !== '0') { cajas[i].style.opacity = u.op = '0'; }
         if (u.pts !== '') { lineas[i].setAttribute('points', u.pts = ''); }
         if (u.r !== '0') { puntos[i].setAttribute('r', u.r = '0'); }
+        if (u.og !== '0.00') { lineas[i].style.opacity = u.og = '0.00'; puntos[i].style.opacity = '0.00'; }
         continue;
       }
 
@@ -133,9 +134,12 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
 
       // 2) la ranura fija. En ancho normal, columna izquierda o derecha repartidas alrededor del
       //    centro; en compacto, dos bandas (arriba y abajo) con todo el texto pegado a la izquierda.
-      const lado = compacto ? -1 : pieza.lado;
+      // En compacto el LADO lo pone la banda, no la pieza: la de arriba a la izquierda y la de
+      // abajo a la derecha. Abajo a la izquierda ya vive el rótulo de capítulo (#rotulo, a 4,5 rem
+      // del borde en compacto) y el último rótulo se le escribía encima.
+      const lado = compacto ? (ranuraI < mitad ? -1 : 1) : pieza.lado;
       const bx = compacto
-        ? ancho * PM.rotulos.margen
+        ? (lado < 0 ? ancho * PM.rotulos.margen : ancho * (1 - PM.rotulos.margen))
         : (pieza.lado < 0 ? ancho * PM.rotulos.columna : ancho * (1 - PM.rotulos.columna));
       const by = compacto
         ? alto * (ranuraI < mitad
@@ -164,6 +168,12 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
         pts = `${ax.toFixed(1)},${ay.toFixed(1)} ${cx.toFixed(1)},${by.toFixed(1)} ${(cx + (bx - cx) * k).toFixed(1)},${by.toFixed(1)}`;
       }
       if (pts !== u.pts) lineas[i].setAttribute('points', u.pts = pts);
+      // La guía se ATENÚA con el mismo escalar. Sin esto, al recogerse el rótulo el texto ya era
+      // invisible (se apaga por debajo de t = 0,62) y la guía seguía dibujada entera: en el crema
+      // quedaban líneas colgando de ningún sitio (esc-16a). Por arriba de t = 0,5 no cambia nada,
+      // así que el trazado de entrada se sigue viendo a plena tinta.
+      const opg = Math.min(1, t * 2).toFixed(2);
+      if (opg !== u.og) { lineas[i].style.opacity = u.og = opg; puntos[i].style.opacity = opg; }
 
       // 4) el punto sobre la pieza aparece de golpe al principio del trazo
       const r = (PM.rotulos.radioPunto * Math.min(1, t * 5)).toFixed(2);

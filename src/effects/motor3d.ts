@@ -15,6 +15,9 @@ import { crearPenacho } from '../motor/penacho';
 // core/escena.ts. Si esa regla se rompe, Vite mete Three en el bundle de entrada y la primera
 // carga pasa de 33 kB comprimidos a 180 kB. Se comprueba mirando el tamaño de index-*.js.
 
+/** Los dos contornos: las aristas de pliegue (LineSegments) y los cascos de silueta (BackSide). */
+const esContorno = (nombre: string): boolean => nombre.startsWith('aristas-') || nombre.startsWith('silueta-');
+
 export function montarMotor(ctx: ContextoMotor): Escena {
   const { m, anfitrion, tiempo, calidad, tactil, rendirse } = ctx;
 
@@ -69,6 +72,18 @@ export function montarMotor(ctx: ContextoMotor): Escena {
     // -------------------------------------------------------------------------------------
     const rig = construirRig(calidad);
     deshacer.push(() => rig.liberar());
+
+    // EL TEMA Y LA TINTA. El capítulo "cómo está hecho" pone `html.is-light` y el fondo pasa de
+    // negro a crema. Los dos colores de contorno no valen para los dos fondos (ver
+    // geometria.ts / aplicarTema), y el lienzo es `alpha: true`, así que nadie más se entera del
+    // cambio: aquí se escucha la clase del <html> y se repinta la tinta. Es una sola escritura de
+    // color por cambio de capítulo, no trabajo por fotograma.
+    const raizHtml = document.documentElement;
+    const mirarTema = (): void => rig.tema(raizHtml.classList.contains('is-light'));
+    mirarTema();
+    const observadorTema = new MutationObserver(mirarTema);
+    observadorTema.observe(raizHtml, { attributes: true, attributeFilter: ['class'] });
+    deshacer.push(() => observadorTema.disconnect());
     // El penacho ligero (dos capas y una sola cara) es lo PRIMERO que se degrada en móvil: mide
     // 9,5 u en un encuadre de 8,8, o sea que ocupa la pantalla entera con mezcla aditiva.
     const penacho = crearPenacho(rig.yLabio, calidad === 'baja');   // cuelga del labio
@@ -82,9 +97,10 @@ export function montarMotor(ctx: ContextoMotor): Escena {
     deshacer.push(() => rotulos.revertir());
 
     if (calidad === 'baja') {
-      // Los contornos son LineSegments (una llamada de dibujo por pieza) y en móvil es lo primero
-      // que sobra: la silueta se sigue leyendo por el sombreado plano.
-      rig.motor.grupo.traverse((o) => { if (o.name.startsWith('aristas-')) o.visible = false; });
+      // Los contornos (aristas + cascos de silueta) son 9 llamadas de dibujo y 33 000 triángulos
+      // repetidos, y el casco además rellena: en móvil, donde lo que duele es el relleno, es lo
+      // primero que sobra. La silueta se sigue leyendo por el sombreado plano.
+      rig.motor.grupo.traverse((o) => { if (esContorno(o.name)) o.visible = false; });
     }
 
     // La coreografía se añade a un maestro que YA está inicializado y en marcha:
@@ -207,7 +223,7 @@ export function montarMotor(ctx: ContextoMotor): Escena {
 
     function contornos(visible: boolean): void {
       if (calidad === 'baja') return;   // en móvil ya están fuera desde el montaje
-      rig.motor.grupo.traverse((o) => { if (o.name.startsWith('aristas-')) o.visible = visible; });
+      rig.motor.grupo.traverse((o) => { if (esContorno(o.name)) o.visible = visible; });
     }
 
     function peldano(k: number): void {
@@ -261,6 +277,7 @@ export function montarMotor(ctx: ContextoMotor): Escena {
       if (mainLoopAnterior) engine.wake();
 
       observadorTam.disconnect();
+      observadorTema.disconnect();
       cancelAnimationFrame(idRaf);
       mqDpr?.removeEventListener('change', alCambiarDpr);
       lienzo.removeEventListener('webglcontextlost', alPerder);

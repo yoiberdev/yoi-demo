@@ -1,9 +1,10 @@
 // Motor de cohete procedimental. Toda la geometria se genera aqui: ni un solo asset.
 // Eje del motor = Y. y = 0 en la garganta de la tobera. La campana baja (-Y), la camara sube (+Y).
-// Unidades de motor: 1 u ~ 0,5 m reales. Campana: 3,30 u de alto y 4,20 u de boca. Motor entero: 7,0 u.
+// Unidades de motor: 1 u ~ 0,5 m reales. Campana: 3,30 u de alto y 4,20 u de boca. Motor entero:
+// 6,48 u de alto (y de -3,35 en el labio a +3,13 en el anillo de bancada) y 4,84 u de ancho.
 
 import {
-  BoxGeometry, BufferGeometry, Color, ConeGeometry, CylinderGeometry, DoubleSide, DynamicDrawUsage,
+  BackSide, BoxGeometry, BufferGeometry, Color, CylinderGeometry, DoubleSide, DynamicDrawUsage,
   EdgesGeometry, ExtrudeGeometry, Float32BufferAttribute, Group, InstancedMesh, LatheGeometry,
   LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, Quaternion,
   Shape, TorusGeometry, TubeGeometry, Vector2, Vector3, CatmullRomCurve3, type Curve, type Material,
@@ -39,8 +40,8 @@ export const M: Ajustes = {
     pasosArco: 6,
     espesor: 0.07,
     segmentos: 96,
-    zunchos: 5,              // aros de refuerzo alrededor del cilindro
-    rZuncho: 0.035,
+    zunchos: 3,              // aros de refuerzo alrededor del cilindro
+    rZuncho: 0.05,
   },
   // Corona de tubos de refrigeracion: N tubos que abrazan la campana con giro helicoidal.
   refrigeracion: {
@@ -102,31 +103,44 @@ export const M: Ajustes = {
     // 55 grados: con 30 uno de los tres paneles caia casi de canto desde la camara de reposo y se
     // leia como un cuchillo. Ninguno queda ahora a menos de 25 grados del plano de vista.
     azimut0: 55,        // grados del primer panel
-    rInterior: 1.12,
-    largo: 1.45,
-    alto: 1.05,
-    espesor: 0.05,
+    // PEGADOS AL CUERPO Y CORTOS. Medido en el grafo: con rInterior 1,12 y largo 1,45 los paneles
+    // llegaban a radio 2,57 -mas anchos que la boca de la campana (2,18)- y a y = 3,28, por encima
+    // del anillo de bancada (3,13). A 200 px eso no era un motor: era un aspa. Ahora el panel cabe
+    // dentro de la silueta que ya manda (la campana) en vez de discutirla.
+    rInterior: 1.05,
+    largo: 1.00,
+    alto: 0.85,
+    espesor: 0.055,
     // NEGATIVA: los paneles caen hacia fuera y abajo. Con +16 subian por encima del anillo de
     // bancada y la silueta del tercio superior era un aspa de veleta, no un motor.
     inclinacion: -8,    // grados de caida hacia fuera
-    y: 2.35,            // por DEBAJO del anillo de bancada (3,05)
-    aletas: 8,          // nervios (corrugado) de la cara
+    y: 2.00,            // por DEBAJO del anillo de bancada (3,05) y de la cupula (2,94)
+    aletas: 4,          // nervios (corrugado) de la cara: con 6 el panel era un garabato de rayas
     amplitud: 0.07,     // altura del corrugado
     sesgo: 60.1,        // grados: el angulo de las aristas largas del logo de Yoiber
   },
   // Placa de identificacion: el monograma de Yoiber como chapa recortada.
   // Contornos precocinados del SVG (yoi-icon.svg), sin SVGLoader: ahorra 11 kB comprimidos.
   placa: {
-    alto: 1.05,          // altura del monograma en unidades de motor
-    espesor: 0.035,
+    // UNA CHAPITA, NO UN CARTEL. Con alto 1,05 la chapa medía 0,86 x 1,39 y llegaba a y = 3,68:
+    // era la pieza MÁS ALTA del motor, tapaba la cúpula y, al ser casi negra, sobre fondo negro
+    // leía como un agujero recortado en el objeto. A la mitad de tamaño y colgada por debajo del
+    // anillo se lee por lo que es: una placa de identificación atornillada.
+    alto: 0.52,          // altura del monograma en unidades de motor
+    espesor: 0.03,
     azimut: 135,         // hueco entre dos radiadores (55 y 175) y fuera del eje de la turbobomba
-    radio: 1.28,         // justo por FUERA del anillo (r 1,15): la chapa se apoya en él
-    y: 3.05,             // a la altura del anillo: atornillada, no flotando
-    chapa: 0.06,         // espesor de la chapa de soporte que va DETRÁS del monograma
-    margen: 0.16,        // margen de la chapa alrededor del monograma, en fracción de `alto`
+    radio: 1.26,         // justo por FUERA del anillo (r 1,15 + tubo 0,075): la chapa se apoya en él
+    y: 2.72,             // cuelga DEL anillo: su borde de arriba queda justo en 3,05
+    chapa: 0.05,         // espesor de la chapa de soporte que va DETRÁS del monograma
+    margen: 0.18,        // margen de la chapa alrededor del monograma, en fracción de `alto`
   },
-  // Contornos.
-  aristas: { umbral: 24, ancho: 1 },
+  // Contornos. `grosor` es el empuje del casco de silueta en unidades de motor. La camara es
+  // ortografica con `encuadre` 8,2 sobre el alto del lienzo: a 800 px de alto, 1 u = 97,6 px, asi
+  // que 0,028 u son 2,7 px de tinta en el reposo y 1,6 px en el despiece, que va a escala 0,58.
+  // Se probo con 0,022 (2,1 px): en el despiece del capitulo claro bajaba a 1,25 px y el borde de
+  // la campana contra el crema se perdia a ratos (a2-z3.png contra a3-z3.png). Por arriba, mas de
+  // 3,5 px engorda las piezas finas -el conducto mide 0,115 de radio- en vez de perfilarlas.
+  aristas: { umbral: 24, ancho: 1, grosor: 0.028 },
   // Paleta: los tres grises del logo de Yoiber + el acento del demo.
   paleta: {
     blanco: 0xf4f4f2,   // --fg del demo
@@ -137,9 +151,34 @@ export const M: Ajustes = {
     // existian en el grafo y NO SE VEIAN en ninguna captura: el objeto se leia como arcilla. Un
     // contorno oscuro sobre el cuerpo es lo que separa "render por defecto" de "ilustracion".
     linea: 0x141412,
-    // La chapa de la placa de identificacion: casi negra, como la linea. Con cualquiera de los tres
-    // grises del logo, uno de los tres brazos del monograma se le fundia encima.
-    chapa: 0x141412,
+    // LOS DOS COLORES DE TINTA, UNO POR TEMA. Se probaron los cuatro pares mirando la captura:
+    //
+    //   · Tema oscuro, fondo #000. La tinta CLARA (0xc8c8c2, el "contorno de pegatina") se probo y
+    //     se descarto: dibuja el borde exterior contra el fondo, pero ahi el objeto ya destaca
+    //     solo, y a cambio BORRA lo unico que hacia falta -la separacion entre una pieza y la de
+    //     detras-, porque pieza y pieza son las dos claras (v-osc-claro.png: los radiadores se
+    //     funden con la camara y el conducto pierde su borde). Asi que tinta oscura tambien aqui,
+    //     y lo mas pegada al fondo que se pueda: con 0x141412 el casco deja un halo gris de 2 px
+    //     alrededor de la silueta sobre el negro puro.
+    //   · Tema claro, fondo crema #efe9df, que es el capitulo "como esta hecho". Aqui pasa lo
+    //     contrario: el gris `blanco` del motor (0xf4f4f2) ES el fondo -la campana y la cupula se
+    //     comen con el papel (a0-z4.png: el labio blanco se derrama sobre el crema sin ningun
+    //     borde)- y la tinta pasa de adorno a ser lo unico que dibuja el objeto. Aqui interesa que
+    //     sea la MISMA tinta que la letra de la pagina (--fg #141414), no el negro del otro tema.
+    //
+    // O sea: la tinta es oscura en los dos temas, pero por razones opuestas y con valores
+    // distintos. `aplicarTema()` las cambia cuando el demo cambia de capitulo.
+    lineaClaro: 0x141412,
+    // CASCO DE SILUETA. Copia de las piezas grandes en BackSide con los vertices empujados por su
+    // normal suavizada: es la linea que WebGL no sabe dibujar con `linewidth` y la que separa el
+    // objeto del fondo y una pieza de la de detras.
+    silueta: 0x050504,
+    siluetaClaro: 0x141412,
+    // La chapa de la placa de identificacion. Casi negra NO: sobre fondo negro la chapa desaparecia
+    // y el recorte se leia como un agujero en el motor. Este gris es mas oscuro que el `oscuro` del
+    // logo (0x3d3d3a) pero sigue teniendo cuerpo sobre negro, y los tres brazos del monograma
+    // (oscuro, medio, blanco) se separan de el.
+    chapa: 0x2a2a27,
   },
 };
 
@@ -163,8 +202,9 @@ type Ajustes = {
   radiadores: { n: number; azimut0: number; rInterior: number; largo: number; alto: number; espesor: number;
     inclinacion: number; y: number; aletas: number; amplitud: number; sesgo: number };
   placa: { alto: number; espesor: number; azimut: number; radio: number; y: number; chapa: number; margen: number };
-  aristas: { umbral: number; ancho: number };
-  paleta: { blanco: number; medio: number; oscuro: number; acento: number; linea: number; chapa: number };
+  aristas: { umbral: number; ancho: number; grosor: number };
+  paleta: { blanco: number; medio: number; oscuro: number; acento: number; linea: number;
+    lineaClaro: number; silueta: number; siluetaClaro: number; chapa: number };
 };
 
 /** Tres niveles. 'baja' es el que va al movil; 'alta' solo si hay sitio de sobra. */
@@ -320,8 +360,10 @@ export function radioTubo(rPared: number, n: number, holgura: number): number {
 
 export interface Materiales {
   blanco: Material; medio: Material; oscuro: Material; acento: Material;
-  /** El demo repinta este color segun el tema: claro sobre fondo negro, oscuro sobre fondo crema. */
+  /** Aristas de pliegue. `aplicarTema()` repinta su color al cambiar de fondo. */
   linea: LineBasicMaterial;
+  /** Casco de silueta: BackSide, sin iluminar. Es tinta, no un material del objeto. */
+  silueta: MeshBasicMaterial;
   /** Sin iluminar: el unico truco para que la garganta "arda" sin postprocesado. */
   caliente: Material;
   /** La chapa de la placa de identificacion (casi negra: separa los tres grises del monograma). */
@@ -335,9 +377,19 @@ export function crearMateriales(): Materiales {
     blanco: plano(M.paleta.blanco, { side: DoubleSide }),
     medio: plano(M.paleta.medio),
     oscuro: plano(M.paleta.oscuro),
-    acento: plano(M.paleta.acento, { emissive: new Color(M.paleta.acento), emissiveIntensity: 0.35 }),
+    // EL EMISIVO DEL ACENTO NO ES SU PROPIO COLOR, es un ámbar mucho más saturado. Motivo medido:
+    // el renderizador no tiene mapeo de tonos, así que "emisivo x N" recorta cada canal a 1 y con
+    // un ámbar claro (0xffd166 = 1 / 0,82 / 0,40) basta N = 1,3 para que los TRES canales lleguen
+    // al tope: los aros salían BLANCOS justo en el latido de la galería y en el encendido, o sea
+    // que el único acento de marca del demo se apagaba en los dos instantes que más se miran
+    // (esc-06, esc-21, esc-22). Con 0xff7a10 (1 / 0,48 / 0,06) el rojo satura primero y el azul
+    // se queda abajo: por brillante que se ponga, el aro sigue siendo ámbar.
+    acento: plano(M.paleta.acento, { emissive: new Color(0xff7a10), emissiveIntensity: 0.35 }),
     // opaco: la linea es tinta, no un velo. (WebGL ignora linewidth: el grosor es siempre 1 px.)
     linea: new LineBasicMaterial({ color: new Color(M.paleta.linea) }),
+    // El casco NO se ilumina: si respondiera a las luces seria una pieza mas del motor, con su
+    // cara clara y su cara oscura, en vez de una linea de tinta de grosor constante.
+    silueta: new MeshBasicMaterial({ color: new Color(M.paleta.silueta), side: BackSide }),
     caliente: new MeshBasicMaterial({ color: new Color(M.paleta.acento), side: DoubleSide }),
     chapa: plano(M.paleta.chapa),
   };
@@ -424,15 +476,19 @@ function construirRefrigeracion(mat: Materiales): Group {
   // Colectores: toros que atan la corona arriba (garganta) y abajo (salida).
   const pIni = curva.getPointAt(0);
   const pFin = curva.getPointAt(1);
-  for (const [nombre, p, rt] of [
-    ['colector-alto', pIni, rPared(0)],
-    ['colector-bajo', pFin, rPared(1)],
-  ] as [string, Vector3, number][]) {
+  // EL COLECTOR DE ARRIBA VA EN AMBAR. Es el anillo de la garganta: el punto mas estrecho, el que
+  // se ve desde CUALQUIER azimut y a cualquier tamano, y el sitio donde el acento significa algo
+  // (ahi es donde arde). Los zunchos de la camara ya daban color, pero quedan tapados por los
+  // paneles desde media vuelta; este no lo tapa nada. El de abajo sigue oscuro: hace de zocalo.
+  for (const [nombre, p, rt, m] of [
+    ['colector-alto', pIni, rPared(0), mat.acento],
+    ['colector-bajo', pFin, rPared(1), mat.oscuro],
+  ] as [string, Vector3, number, Material][]) {
     const rad = Math.hypot(p.x, p.z) + rt * 0.35;
     const t = new TorusGeometry(rad, Math.max(r.rColector, rt * 0.55), 6, M.tobera.segmentos);
     t.rotateX(Math.PI / 2);
     t.translate(0, p.y, 0);
-    g.add(nombrar(new Mesh(t, mat.oscuro), nombre));
+    g.add(nombrar(new Mesh(t, m), nombre));
   }
   return g;
 }
@@ -564,10 +620,16 @@ function construirTurbobomba(mat: Materiales): Group {
   rotor.add(nombrar(alabes, 'turbobomba-alabes'));
   g.add(rotor);
 
-  const escape = new ConeGeometry(t.rTurbina * 0.86, t.largoTurbina * 0.7, t.segmentos, 1, true);
-  escape.rotateX(Math.PI);
+  // ESCAPE TRUNCADO, NO UN CONO EN PUNTA. Era un ConeGeometry con la punta hacia abajo y a 6x el
+  // conjunto (tuerca + cilindro + corona dentada + punta negra) no leia como una turbobomba: leia
+  // como una PEONZA o como la punta de un dardo (recorte zoom-despiece-rotulos-derecha). Un escape
+  // de turbina termina en una boquilla, que es un tronco de cono cerrado y un anillo de labio.
+  const escape = new CylinderGeometry(t.rTurbina * 0.86, t.rTurbina * 0.40, t.largoTurbina * 0.7, t.segmentos, 1);
   escape.translate(0, yT - t.largoTurbina * 0.85, 0);
   g.add(nombrar(new Mesh(escape, mat.medio), 'turbobomba-escape'));
+  const boquilla = new CylinderGeometry(t.rTurbina * 0.46, t.rTurbina * 0.46, t.largoTurbina * 0.16, t.segmentos, 1);
+  boquilla.translate(0, yT - t.largoTurbina * 1.28, 0);
+  g.add(nombrar(new Mesh(boquilla, mat.oscuro), 'turbobomba-boquilla'));
 
   const entrada = new CylinderGeometry(t.rEntrada, t.rEntrada, t.largoEntrada, 16, 1);
   entrada.translate(0, t.largoCuerpo / 2 + t.largoEntrada / 2, 0);
@@ -615,11 +677,34 @@ function construirConductos(mat: Materiales): Group {
   const rutas = [c0, c1, c2];
   // el tercero era `oscuro` y sobre fondo negro desaparecia: los tres van en tonos que se ven
   const materiales = [mat.medio, mat.blanco, mat.medio];
+  // TAPAS. `TubeGeometry` con `closed = false` deja los dos extremos ABIERTOS, y un tubo abierto
+  // visto de frente es un AGUJERO NEGRO ELIPTICO: se veia en el despiece al final del conducto de
+  // escape y otra vez abajo a la izquierda en el reposo. Cada extremo se tapa con una bolita del
+  // radio del tubo. Van en InstancedMesh agrupadas POR MATERIAL, asi que las seis tapas cuestan
+  // dos llamadas de dibujo, no seis.
+  const perfilBola: Vector2[] = [];
+  for (let i = 0; i <= 6; i++) {
+    const a = -Math.PI / 2 + (i / 6) * Math.PI;
+    perfilBola.push(new Vector2(Math.max(0.0001, Math.cos(a)), Math.sin(a)));
+  }
+  const bola = new LatheGeometry(perfilBola, 10);
+  const porMat = new Map<Material, { p: Vector3; r: number }[]>();
   rutas.forEach((pts, k) => {
     const curva = new CatmullRomCurve3(pts, false, 'centripetal', 0.5);
     const geo = new TubeGeometry(curva, c.segmentosU, c.radios[k], c.segmentosV, false);
     g.add(nombrar(new Mesh(geo, materiales[k]), `conducto-${k}`));
+    const lista = porMat.get(materiales[k]) ?? [];
+    lista.push({ p: curva.getPointAt(0), r: c.radios[k] }, { p: curva.getPointAt(1), r: c.radios[k] });
+    porMat.set(materiales[k], lista);
   });
+  let nTapa = 0;
+  const mTapa = new Matrix4();
+  for (const [material, lista] of porMat) {
+    const malla = new InstancedMesh(bola, material, lista.length);
+    lista.forEach((e, j) => malla.setMatrixAt(j, mTapa.makeScale(e.r, e.r, e.r).setPosition(e.p)));
+    malla.instanceMatrix.needsUpdate = true;
+    g.add(nombrar(malla, `conducto-tapas-${nTapa++}`));
+  }
   g.userData.radial = new Vector3(Math.cos(th), 0, Math.sin(th));
   return g;
 }
@@ -665,11 +750,26 @@ function construirRadiadores(mat: Materiales): Group {
   // Seccion corrugada del panel (plano alto x espesor); se extruye a lo largo del panel.
   // Luego se cizalla para que las aristas largas queden a 60,1 grados del corte del extremo:
   // es la familia de aristas dominante del logo de Yoiber, metida en la propia chapa.
+  // CHAPA CORRUGADA DE VERDAD: la onda va en las DOS caras (ida por delante, vuelta por detras
+  // desplazada el espesor), no una cara ondulada sobre un dorso plano. Con el dorso plano, el panel
+  // que daba la espalda a la camara era una losa gris lisa -la "hoja de papel"- y de canto era una
+  // cuchilla; asi el relieve se ve venga de donde venga y el canto es un peine, no un filo.
+  // CANTO LISO EN LOS DOS EXTREMOS. El corrugado llegaba hasta el borde, asi que la SILUETA del
+  // panel era el propio zigzag: de canto se veia un dentado escalonado (recorte zoom-placa-reposo)
+  // y en el despiece los tres paneles eran dos parches de rayado que no se leian como nada. Con un
+  // marco liso el contorno del panel es recto y el relieve queda DENTRO, que es como se lee una
+  // chapa corrugada de verdad.
   const s = new Shape();
   const pasos = r.aletas * 2;
+  const borde = r.alto * 0.14;
+  const util = r.alto - borde * 2;
+  const px = (k: number): number => -r.alto / 2 + borde + (k * util) / pasos;
+  const onda = (k: number): number => (k % 2) * r.amplitud;
   s.moveTo(-r.alto / 2, 0);
-  for (let k = 1; k <= pasos; k++) s.lineTo(-r.alto / 2 + (k * r.alto) / pasos, (k % 2) * r.amplitud);
+  for (let k = 0; k <= pasos; k++) s.lineTo(px(k), onda(k));
+  s.lineTo(r.alto / 2, 0);
   s.lineTo(r.alto / 2, -r.espesor);
+  for (let k = pasos; k >= 0; k--) s.lineTo(px(k), onda(k) - r.espesor);
   s.lineTo(-r.alto / 2, -r.espesor);
   s.closePath();
   const geo = new ExtrudeGeometry(s, { depth: r.largo, bevelEnabled: false, curveSegments: 1 });
@@ -697,19 +797,35 @@ function construirRadiadores(mat: Materiales): Group {
 }
 
 /**
- * Monograma de Yoiber, copiado del SVG en coordenadas del viewBox 439x523 y
- * normalizado: origen en la junta de las tres formas (141,84 / 229,35), Y hacia arriba,
- * altura total = 1. Son poligonos rectos: no hace falta SVGLoader ni curvas.
+ * Monograma de Yoiber, sacado del SVG (yoi-icon.svg, viewBox 439x523) y APLANADO AQUI.
+ *
+ * La version anterior era el mismo SVG con las curvas TIRADAS A LA BASURA: se quedaba solo con
+ * los extremos de cada `C`, o sea puntas afiladas donde el logo tiene esquinas redondeadas y, lo
+ * que se veia de verdad, un ESCALON en la junta -el brazo blanco baja mas que el oscuro y los dos
+ * se cierran con la misma curva; en recta eso deja un diente-. A 13x en pantalla no leia como
+ * logotipo sino como malla rota (captura esc-17 del turno anterior, recorte z-seam).
+ *
+ * Ahora las cubicas van aplanadas a segmentos de ~14 unidades de viewBox: 27/19/27 puntos, que a
+ * la escala a la que se ve (media pantalla de alto) es menos de 1 px de error. Son poligonos
+ * rectos: sigue sin hacer falta SVGLoader.
  */
 export const MONOGRAMA: [number, number][][] = [
   // gris oscuro (brazo que baja a la izquierda)
-  [[218.560, 324.158], [284.330, 318.938], [287.248, 314.000], [178.507, 502.841],
-   [41.928, 522.881], [7.268, 462.912], [141.839, 229.348]],
+  [[218.56, 324.16], [225.89, 331.20], [234.32, 335.98], [243.44, 338.53], [252.82, 338.87], [262.02, 337.05],
+   [270.63, 333.10], [278.21, 327.05], [284.33, 318.94], [287.17, 314.00], [287.25, 314.00], [178.51, 502.84],
+   [173.53, 509.69], [167.34, 515.25], [160.17, 519.40], [152.26, 521.99], [143.84, 522.88], [41.93, 522.88],
+   [30.97, 521.40], [21.37, 517.26], [13.39, 510.94], [7.30, 502.90], [3.37, 493.61], [1.87, 483.53], [3.08,
+   473.15], [7.27, 462.91], [141.84, 229.35]],
   // gris medio (brazo que sube a la izquierda)
-  [[204.770, 0.000], [239.437, 59.955], [141.891, 229.411], [8.981, 65.162], [40.076, 0.000]],
+  [[204.77, 0.00], [215.72, 1.48], [225.33, 5.62], [233.31, 11.94], [239.40, 19.98], [243.33, 29.27], [244.82,
+   39.34], [243.62, 49.72], [239.44, 59.96], [141.89, 229.41], [8.98, 65.16], [2.86, 54.85], [0.18, 43.95],
+   [0.65, 33.05], [3.98, 22.77], [9.87, 13.72], [18.05, 6.50], [28.21, 1.73], [40.08, 0.00]],
   // blanco (brazo que sube a la derecha)
-  [[398.846, 0.038], [433.279, 59.941], [284.330, 318.938], [218.561, 324.158],
-   [141.840, 229.347], [262.418, 20.069], [297.077, 0.039]],
+  [[398.85, 0.04], [402.03, 0.16], [405.12, 0.51], [414.62, 3.28], [422.85, 8.13], [429.58, 14.68], [434.60,
+   22.56], [437.70, 31.40], [438.66, 40.83], [437.25, 50.46], [433.28, 59.94], [284.33, 318.94], [278.21,
+   327.05], [270.63, 333.10], [262.03, 337.05], [252.82, 338.87], [243.44, 338.53], [234.32, 335.98], [225.89,
+   331.20], [218.56, 324.16], [141.84, 229.35], [262.42, 20.07], [267.39, 13.23], [273.58, 7.66], [280.75,
+   3.52], [288.67, 0.93], [297.08, 0.04]],
 ];
 
 function construirPlaca(mat: Materiales): Group {
@@ -773,6 +889,158 @@ function anadirAristas(raiz: Group, mat: Materiales): void {
   }
 }
 
+// CASCO DE SILUETA (el contorno de verdad).
+//
+// Las aristas de arriba son LineSegments y WebGL dibuja TODAS las lineas de 1 px: `linewidth` no
+// hace nada en ningun navegador de escritorio. Un contorno de 1 px sobre un objeto de 500 px es
+// justo lo que no se ve. La tecnica clasica que si funciona sin postprocesado es el casco
+// invertido: una COPIA de la malla con `side: BackSide` -o sea, solo se dibujan sus caras
+// traseras- y los vertices empujados hacia fuera por su normal. Como las caras delanteras del
+// casco no se dibujan, el objeto de verdad lo tapa entero salvo en el borde, donde asoma el
+// empuje: un reborde de tinta de grosor constante alrededor de la silueta y de cada pieza contra
+// la de detras.
+//
+// El detalle que lo hace o lo rompe: NO se puede empujar por la normal que trae la geometria.
+// Una caja, un cilindro o un ExtrudeGeometry repiten cada vertice de esquina una vez por cara,
+// cada copia con la normal de SU cara; al empujarlas cada una por su lado el casco se abre por
+// las esquinas y aparecen grietas por las que se ve el fondo. Hay que soldar por posicion y
+// empujar por la normal PROMEDIO de las caras que comparten esa posicion, que es lo que hace
+// `normalesSoldadas()`. Se conserva el indice y el numero de vertices del original: la copia no
+// lleva ni normales ni uv (el material es basico y no las mira), asi que son 12 bytes por vertice.
+
+function normalesSoldadas(geo: BufferGeometry): { nor: Float32Array; borde: Uint8Array } {
+  const pos = geo.attributes.position;
+  const n = pos.count;
+  const idx = geo.index;
+  const cuenta = idx ? idx.count : n;
+  const nor = new Float32Array(n * 3);
+  const borde = new Uint8Array(n);
+  // Clave = posicion redondeada a 1e-4 u (0,05 mm reales): junta las copias exactas de una esquina
+  // sin juntar dos vertices que de verdad son distintos (el detalle mas fino del motor es el
+  // espesor del panel radiador, 0,055 u, o sea 550 veces esta tolerancia).
+  const clave = new Map<string, number>();
+  const soldado = new Int32Array(n);       // vertice -> id soldado
+  const acum: Vector3[] = [];
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(pos.getX(i) * 1e4)},${Math.round(pos.getY(i) * 1e4)},${Math.round(pos.getZ(i) * 1e4)}`;
+    let id = clave.get(k);
+    if (id === undefined) { id = acum.length; clave.set(k, id); acum.push(new Vector3()); }
+    soldado[i] = id;   // varias copias de una esquina comparten acumulador
+  }
+  // Suma de normales de cara SIN normalizar: el producto vectorial pesa por el area del
+  // triangulo, que es exactamente el promedio que quiere un casco (las caras grandes mandan).
+  const a = new Vector3(); const b = new Vector3(); const c = new Vector3();
+  const ab = new Vector3(); const ac = new Vector3(); const cr = new Vector3();
+  // Cuenta de caras por arista soldada: la que solo tiene UNA es un borde abierto (ver abajo).
+  const aristas = new Map<number, number>();
+  const cuentaArista = (u: number, v: number): void => {
+    const k = u < v ? u * acum.length + v : v * acum.length + u;
+    aristas.set(k, (aristas.get(k) ?? 0) + 1);
+  };
+  for (let f = 0; f < cuenta; f += 3) {
+    const i0 = idx ? idx.getX(f) : f;
+    const i1 = idx ? idx.getX(f + 1) : f + 1;
+    const i2 = idx ? idx.getX(f + 2) : f + 2;
+    a.fromBufferAttribute(pos, i0); b.fromBufferAttribute(pos, i1); c.fromBufferAttribute(pos, i2);
+    cr.crossVectors(ab.subVectors(b, a), ac.subVectors(c, a));
+    acum[soldado[i0]].add(cr); acum[soldado[i1]].add(cr); acum[soldado[i2]].add(cr);
+    cuentaArista(soldado[i0], soldado[i1]);
+    cuentaArista(soldado[i1], soldado[i2]);
+    cuentaArista(soldado[i2], soldado[i0]);
+  }
+  const abierto = new Uint8Array(acum.length);
+  for (const [k, veces] of aristas) {
+    if (veces !== 1) continue;
+    abierto[Math.floor(k / acum.length)] = 1;
+    abierto[k % acum.length] = 1;
+  }
+  for (let i = 0; i < n; i++) {
+    const g = acum[soldado[i]];
+    const l = g.length();
+    if (l > 1e-12) { nor[i * 3] = g.x / l; nor[i * 3 + 1] = g.y / l; nor[i * 3 + 2] = g.z / l; }
+    borde[i] = abierto[soldado[i]];
+  }
+  return { nor, borde };
+}
+
+/**
+ * Copia de una geometria con los vertices empujados por su normal soldada.
+ *
+ * Los vertices de BORDE ABIERTO no se empujan. Casi todas las piezas son solidos cerrados, pero la
+ * campana y la cupula son revoluciones de perfil abierto (la campana termina en un anillo en el
+ * plano de la garganta) y un conducto es un tubo sin tapas. En un borde abierto la normal promedio
+ * solo tiene caras de UN lado, asi que apunta hacia fuera Y hacia el borde: el casco se abria como
+ * una trompeta por el filo y asomaba por delante de su propia pieza. Se veia en la captura como
+ * dientes negros mordiendo el anillo ambar de la garganta (con-z5.png contra sin-z5.png). Dejando
+ * el borde quieto, el casco termina EXACTAMENTE donde termina la pieza y la tinta se desvanece en
+ * la ultima fila de triangulos, que es donde de todas formas la tapa otra pieza.
+ */
+export function geometriaSilueta(geo: BufferGeometry, grosor: number): BufferGeometry {
+  const pos = geo.attributes.position;
+  const { nor, borde } = normalesSoldadas(geo);
+  const n = pos.count;
+  const fuera = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const d = borde[i] ? 0 : grosor;
+    fuera[i * 3] = pos.getX(i) + nor[i * 3] * d;
+    fuera[i * 3 + 1] = pos.getY(i) + nor[i * 3 + 1] * d;
+    fuera[i * 3 + 2] = pos.getZ(i) + nor[i * 3 + 2] * d;
+  }
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(fuera, 3));
+  if (geo.index) g.setIndex(Array.from(geo.index.array as ArrayLike<number>));
+  return g;
+}
+
+// SOLO LAS PIEZAS GRANDES, Y LA CORONA DE TUBOS NO ES UNA DE ELLAS.
+//
+// Cada casco es una llamada de dibujo mas y repite los triangulos de su pieza. Las piezas
+// pequenas (labio, cuello, zunchos, orificios, alabes, tirantes, anillo de bancada, placa) se
+// quedan fuera: son mas finas o casi tan finas como el propio grosor del casco, asi que el casco
+// se las comeria en vez de perfilarlas, y sumarian 12 llamadas mas para nada.
+//
+// LA CORONA SE PROBO Y SE DESHIZO (mirando la captura, no el codigo). Es la pieza mas grande que
+// hay, y su casco se hacia con UNA InstancedMesh que compartia `instanceMatrix` con los tubos: una
+// sola llamada para los 36. Pero los tubos van a `holgura` 0,88, o sea que el hueco entre dos
+// tubos vecinos mide ~0,02 u -el mismo numero que el grosor del casco-, asi que cada casco se
+// metia dentro de los dos tubos de al lado: en la captura la corona salia con la tinta rota a
+// trozos, como una pantalla mal impresa, y en la garganta, donde los tubos se juntan, los 36
+// cascos se sumaban en un borron negro ENCIMA del anillo ambar, que es justo el acento que la
+// paleta acababa de ganar. Deshecho: son 23 040 triangulos y 1 llamada que ademas estropeaban.
+// La corona ya se lee tubo a tubo por su propio sombreado (se ve en a0-z1.png).
+const CON_SILUETA = [
+  'campana-pared', 'camara-pared', 'cupula-domo', 'inyector-placa',
+  'radiador-0', 'radiador-1', 'radiador-2',
+  'turbobomba-cuerpo', 'conducto-0', 'conducto-1',
+];
+
+/** Cuelga el casco de cada pieza grande. Va como HIJO de la pieza y sin transformacion propia:
+ *  asi viaja con ella en el despiece, en el abanico de los radiadores y en el momento de la marca
+ *  sin que la coreografia se entere de que existe. */
+function anadirSiluetas(raiz: Group, mat: Materiales): void {
+  const objetivo: Mesh[] = [];
+  raiz.traverse((o) => { if (o instanceof Mesh && !(o instanceof InstancedMesh) && CON_SILUETA.includes(o.name)) objetivo.push(o); });
+  for (const o of objetivo) {
+    const casco = new Mesh(geometriaSilueta(o.geometry, M.aristas.grosor), mat.silueta);
+    // El casco se dibuja ANTES que su pieza (renderOrder mas bajo dentro de la lista opaca) para
+    // que el rechazo temprano por profundidad de la pieza tenga algo que rechazar.
+    casco.renderOrder = -1;
+    o.add(nombrar(casco, `silueta-${o.name}`));
+  }
+}
+
+/**
+ * Cambia los dos colores de tinta al cambiar de tema. Medido sobre las capturas: sobre negro la
+ * tinta casi negra separa una pieza de otra pero contra el FONDO no dibuja nada (negro sobre
+ * negro), y sobre el crema del capitulo "como esta hecho" pasa justo lo contrario -ahi la tinta es
+ * lo unico que separa la campana blanca (0xf4f4f2) del papel (#efe9df), que son el mismo color.
+ * Por eso los dos pares viven en la paleta y no hay un solo color "de contorno".
+ */
+export function aplicarTema(mat: Materiales, claro: boolean): void {
+  mat.linea.color.setHex(claro ? M.paleta.lineaClaro : M.paleta.linea);
+  mat.silueta.color.setHex(claro ? M.paleta.siluetaClaro : M.paleta.silueta);
+}
+
 // ---------------------------------------------------------------------------
 // 7. MONTAJE
 // ---------------------------------------------------------------------------
@@ -804,6 +1072,7 @@ export function crearMotor(): Motor {
   const bancada = construirBancada(materiales);
   grupo.add(propulsor, periferia, bancada);
   anadirAristas(grupo, materiales);
+  anadirSiluetas(grupo, materiales);
 
   const piezas: Record<string, Object3D> = {};
   grupo.traverse((o) => { if (o.name) piezas[o.name] = o; });

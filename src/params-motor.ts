@@ -3,19 +3,26 @@
 // pedir el trozo 3D. Este fichero solo lo importa el trozo diferido.
 //
 // UNIDADES. Las de la geometría (src/motor/geometria.ts): el eje del motor es Y, y = 0 está en la
-// garganta de la tobera. Medido sobre el grafo real: el motor ocupa de y = -3,35 (labio de la
-// campana) a y = +4,91 (punta de los radiadores) y ±3,1 en X; su centro está en y = +0,78.
+// garganta de la tobera. Medido sobre el grafo real (bbox de cada pieza en el marco del motor):
+// el motor ocupa de y = -3,35 (labio de la campana) a y = +3,13 (anillo de bancada) y ±2,42 en X;
+// su centro está en y = -0,11. Antes llegaba a +3,68 porque la chapa del monograma sobresalía por
+// encima de todo; ahora la pieza más alta es la que debe serlo, el anillo de empuje.
 export const PM = {
   motor: {
     // El objeto tiene que LLENAR el cuadro: es media parte del efecto de animejs.com. Con 9,8
     // sobre un motor de 7,6 de alto quedaba un tercio de aire arriba y abajo (visto en captura).
-    encuadre: 8.8,    // alto del frustum ortográfico (unidades de motor) con zoom = 1
+    encuadre: 8.2,    // alto del frustum ortográfico (unidades de motor) con zoom = 1
     // ANCHO MÍNIMO visible. Una cámara ortográfica fija el ALTO y deja que el ancho lo ponga el
     // aspecto: en un móvil de pie (390x844, aspecto 0,46) el encuadre sale de 9,8 x 4,5 y el motor,
     // que mide 6,2 de ancho, se salía por los lados (comprobado en captura). Si el ancho no llega
     // a este número, se abre el encuadre entero.
     anchoMin: 7.4,
-    centro: -0.78,    // el motor se baja esto para que su centro caiga en el centro del encuadre
+    // MEDIDAS DEL OBJETO, para poder encuadrar sin adivinar. Salen del bbox del grafo (mismo
+    // origen que el comentario de arriba): el motor ocupa ±2,42 en X y de -3,35 a +3,13 en Y.
+    // Las usa el desvío de la galería para no sacar la máquina del cuadro (ver coreografia.ts).
+    medioAncho: 2.42,
+    medioAlto: 3.35,
+    centro: 0.11,     // el motor se sube esto para que su centro caiga en el centro del encuadre
     camara: [0, 3.4, 20] as [number, number, number], // ortográfica: solo fija la dirección de vista
     cerca: -60,
     lejos: 80,
@@ -37,13 +44,13 @@ export const PM = {
   //   lado:  columna izquierda (-1, cuatro) o derecha (+1, cinco).
   piezas: [
     { id: 'bancada',       y: 3.6,  r: 0,   ancla: [1.15, 3.05, 0],     lado: -1, movil: true, titulo: 'Estructura de empuje', nota: 'anillo y 12 tirantes en A' },
-    { id: 'radiadores',    y: 1.9,  r: 0,   ancla: [-1.86, 3.35, 1.09], lado: -1, titulo: 'Paneles radiadores', nota: 'tres a 120°, aristas a 60,1°' },
+    { id: 'radiadores',    y: 1.9,  r: 0,   ancla: [-2.30, 2.40, 1.05], lado: -1, titulo: 'Paneles radiadores', nota: 'tres a 120°, aristas a 60,1°' },
     { id: 'cupula',        y: 2.2,  r: 0,   ancla: [0.6, 2.8, 0],       lado: 1,  titulo: 'Cúpula del colector', nota: 'se levanta y deja ver los inyectores' },
     { id: 'inyector',      y: 1.3,  r: 0,   ancla: [1.06, 2.24, 0],     lado: 1,  movil: true, titulo: 'Placa de inyectores', nota: '127 orificios en siete anillos' },
-    { id: 'turbobomba',    y: 0.9,  r: 2.3, ancla: [0, 0.2, 0],         lado: 1,  movil: true, titulo: 'Turbobomba', nota: 'voluta, cuerpo, turbina y escape' },
+    { id: 'turbobomba',    y: 0.9,  r: 2.3, ancla: [0, 0.2, 0],         lado: 1,  titulo: 'Turbobomba', nota: 'voluta, cuerpo, turbina y escape' },
     { id: 'camara',        y: 0.4,  r: 0,   ancla: [0.97, 1.5, 0],      lado: -1, movil: true, titulo: 'Cámara de combustión', nota: 'relación de contracción 3,24' },
-    { id: 'conductos',     y: 0,    r: 1.7, ancla: [1.2, 0.8, 0],       lado: 1,  titulo: 'Conductos', nota: 'descarga, línea al domo y escape' },
-    { id: 'refrigeracion', y: -1.0, r: 0,   ancla: [0.66, -0.1, 0.3],   lado: -1, movil: true, titulo: 'Corona de refrigeración', nota: '36 tubos de radio variable' },
+    { id: 'conductos',     y: 0,    r: 1.1, ancla: [1.2, 0.8, 0],       lado: 1,  titulo: 'Conductos', nota: 'descarga, línea al domo y escape' },
+    { id: 'refrigeracion', y: -1.0, r: 0,   ancla: [0.66, -0.1, 0.3],   lado: -1, titulo: 'Corona de refrigeración', nota: '36 tubos de radio variable' },
     { id: 'campana',       y: -2.3, r: 0,   ancla: [1.6, -2.6, 0],      lado: 1,  movil: true, titulo: 'Campana de la tobera', nota: 'perfil de Rao, expansión 17,6' },
   ] as PiezaNum[],
 
@@ -72,7 +79,19 @@ export const PM = {
       dur: 560,
       ease: 'out(4)',
       coronaDur: 760,    // la corona entra la última: es la imagen que vende
-      coronaPaso: 9,     // ms entre tubo y tubo (la ola recorre el anillo una vuelta entera)
+      // EL REPARTO DE LA CORONA VA POR ÁNGULO A LA CÁMARA, no por índice. Ver coreografia.ts: el
+      // índice del tubo ES su ángulo y su entrada es RADIAL, así que cualquier reparto por índice
+      // (`from: 'first'`, `'center'`, …) recorre la corona en un sentido y deja media corona dentro
+      // y media fuera durante todo el gesto.
+      coronaReparto: 340,  // ms entre el primer tubo y el último (el gesto entero dura esto + coronaDur)
+      // Azimut LOCAL del tubo que mira a la cámara mientras dura el gesto. MEDIDO en el grafo
+      // (cap6/azimut.mjs): la cámara está a 92° del motor cuando empieza y a 114° cuando acaba,
+      // porque `raiz.rotateY` sigue girando de 1,8° a 26,3° durante el gesto. 105° es el centro:
+      // el tubo del frente es el 10,5 de 36.
+      coronaAzimut: 105,
+      // 'detras' = la ola nace en el tubo del fondo, se cierra por los dos costados a la vez y el
+      // ÚLTIMO en encajar es el que mira a la cámara.
+      coronaDesde: 'detras' as 'frente' | 'detras',
       coronaRebote: 1.5, // sobrepaso del ease outBack
       coronaFuera: 4.2,  // de cuán lejos (radialmente) vienen los tubos
       escala: [0.9, 0.96] as [number, number],
@@ -89,15 +108,31 @@ export const PM = {
     },
     galeria: {
       giro: 300,      // grados en todo el tramo, a velocidad constante
-      apartar: -3.2,  // se va a la izquierda (unidades de motor) para dejar sitio a las demos
+      // EL DESVÍO DE LA GALERÍA. Magnitud, siempre positiva: la dirección la decide la
+      // coreografía mirando el encuadre de verdad (ver `aplicar`, punto 4b).
+      //
+      // Era -3,2 en X a secas y estaba mal por dos motivos medidos en captura:
+      //   · en un móvil de pie el encuadre solo tiene 7,4 u de ancho, así que 3,2 sacaba el tercio
+      //     izquierdo de la campana FUERA de la pantalla durante los 8 000 del capítulo más largo
+      //     (mov-05, mov-06, mov-08);
+      //   · y en escritorio dejaba el 55 % del cuadro en negro para NADA: el escenario CSS con las
+      //     placas se apaga cuando entra el motor (`html.motor-on #stage { opacity: 0 }`), o sea
+      //     que el hueco no lo ocupa nadie.
+      // 1,7 es un descentrado de composición —"me aparto mientras hablan otros"—, no un abandono.
+      apartar: 1.4,
+      margenApartar: 0.35,  // aire que se le deja al objeto contra el borde al desviarlo
       escala: 0.72,
       luz: 0.55,
+      // El desvío ARRANCA TARDE a propósito: hasta 0,10 el motor se queda montado, entero y
+      // centrado. Ese fotograma —la máquina recién ensamblada, de frente y a tamaño— no existía
+      // en todo el demo: el desvío empezaba en el mismo instante en que aterrizaba el último tubo.
+      espera: 0.1,
       entra: 0.08,
       vuelve: 0.1,
       pulsos: 8,      // un latido del inyector por demo, alineado con el contador "n / 8"
       pulsoSube: 240,
       pulsoBaja: 560,
-      emisivo: 2.6,   // emissiveIntensity en el pico del latido
+      emisivo: 1.05,  // emissiveIntensity en el pico del latido (ver el emisivo del acento en geometria.ts)
     },
     como: {
       abrir: [0, 0.12] as [number, number],
@@ -109,9 +144,9 @@ export const PM = {
       quieto: [0.68, 0.78] as [number, number],
       recomponer: [0.78, 1] as [number, number],
       rotX: -20,      // se inclina para ver el despiece desde arriba
-      bajar: 0.25,    // el despiece se va más abajo que arriba: se sube para centrarlo en el cuadro
+      bajar: -0.64,   // el despiece se va más ARRIBA que abajo: se baja para centrarlo en el cuadro
       desplazar: -0.6, // el despiece crece hacia la derecha (turbobomba y conductos): se compensa
-      zoom: 0.62,     // el despiece ocupa ~12,3 u de alto: 8,8 / 0,62 = 14,2 u de encuadre
+      zoom: 0.58,     // el despiece ocupa ~12,3 u de alto: 8,2 / 0,58 = 14,1 u de encuadre
       giroAbre: 62,
       giroParallax: 34,
       giroFinal: 22,
@@ -121,7 +156,7 @@ export const PM = {
       durRotulo: 420,
       pasoCierraRotulo: 45,
       durCierraRotulo: 260,
-      pasoTubo: 6,
+      repartoTubo: 220,  // ms entre el primer tubo y el último al florecer (reparto por ángulo, no por índice)
       tuboFuera: 0.6,  // cuánto florece cada tubo hacia fuera
       // Si el motor se apaga del todo, la marca no EMERGE del objeto: se superpone a un fotograma
       // negro y se lee como marca de agua (el mismo plano se conseguiría con un <img>). El motor
@@ -142,7 +177,7 @@ export const PM = {
       alturaSalida: 17, // se va por arriba, fuera de cuadro
       escalaSalida: 1.14,
       zoom: [1, 0.72] as [number, number],
-      emisiva: 6.5,     // emissiveIntensity de los inyectores en el encendido
+      emisiva: 1.55,    // emissiveIntensity de los inyectores en el encendido (más recorta a blanco)
       luzCamara: 26,    // PointLight en la garganta (unidades de motor: el radio es grande)
     },
     origen: 'propio',
@@ -155,20 +190,34 @@ export const PM = {
   // delante de la cámara mientras el resto del motor se apaga.
   marca: {
     adelante: 9,   // cuánto se adelanta la placa HACIA la cámara desde el centro del motor
-    alto: 0.5,     // fracción del encuadre efectivo que ocupa la marca
+    // 0,32 y no 0,5. Con medio cuadro de alto el monograma no era un remate: era una pantalla de
+    // carga encima del motor, y cada defecto de la malla se veía a tamaño natural. A un tercio del
+    // alto la marca manda igual (el resto del motor está al 34 % de luz y al 50 % de opacidad) y
+    // el objeto sigue leyéndose detrás, que es justo lo que pedía este plano.
+    alto: 0.32,    // fracción del encuadre efectivo que ocupa la marca
     emisiva: 0.95, // cuánto se auto-ilumina cuando manda (la luz clave está al 18 % en ese momento)
     origen: 'propio',
   },
 
   rotulos: {
     anchoCompacto: 900,   // px de ancho por debajo de los cuales solo se pintan los rótulos `movil`
-    // EN COMPACTO los seis rótulos van en dos bandas, arriba y abajo del objeto, y NO en columnas
+    // EN COMPACTO los rótulos van en dos bandas, arriba y abajo del objeto, y NO en columnas
     // laterales: en 390 px de ancho una columna se escribe encima del motor y se sale por el borde
     // (comprobado en captura: "Estructura de empuje" caía sobre un radiador).
+    //
+    // CUATRO, y repartidos POR LA Y DEL ANCLA. Eran seis a partes iguales entre las dos bandas, y
+    // así "Cámara de combustión" —cuya pieza vive en la mitad ALTA del despiece— caía en la banda
+    // de abajo: su guía subía cruzando la campana entera y se cortaba con las otras cinco
+    // (mov-13, mov-14, mov-15). Con la banda de arriba quedándose los tres anclajes altos y la de
+    // abajo solo el de la campana, las ranuras van en el mismo orden que las anclas y NINGUNA guía
+    // puede cruzar otra: es geometría, no suerte.
     margen: 0.045,        // fracción del ancho hasta el borde, en compacto
-    bandaAlta: 0.07,      // primera ranura de la banda de arriba
-    bandaBaja: 0.72,      // primera ranura de la banda de abajo
-    pasoCompacto: 0.075,  // separación entre ranuras de una banda
+    bandaAlta: 0.045,     // primera ranura de la banda de arriba
+    enBandaAlta: 3,       // cuántas ranuras lleva la banda de arriba (el resto van abajo)
+    // 0,865: por debajo del labio de la campana (que acaba en 0,82) y por encima del rótulo de
+    // capítulo, que en compacto vive a 4,5 rem del borde inferior (~0,915).
+    bandaBaja: 0.865,     // primera ranura de la banda de abajo
+    pasoCompacto: 0.07,   // separación entre ranuras de una banda
     columna: 0.045,   // más de la mitad del cuadro era negro vacío con 0,085
     codo: 0.05,       // el codo va en el extremo CERCANO al objeto: así la diagonal no cruza texto
     alto: 0.115,
@@ -178,10 +227,28 @@ export const PM = {
   },
 
   penacho: {
-    capas: 4,
-    largo: 7,        // unidades de motor, DESDE EL LABIO (la campana mide 3,3 de largo)
-    radio: 2.5,     // el penacho nace con el radio de la boca de la campana (2,10) y se afila
-    diamantes: 7,
+    // SEIS, no cuatro. El degradado radial se hace con capas encajadas (no hay shader), así que el
+    // número de capas ES la resolución del degradado: con cuatro, la franja que solo cubre la capa
+    // de fuera medía el 14 % del radio y salía como una FUNDA MARRÓN de canto duro alrededor del
+    // chorro (recorte zoom-penacho-boca). Con seis, cada escalón es la mitad y el canto exterior
+    // se deshace. Cuestan 2 llamadas y ~1 500 triángulos más, en el único fotograma del demo donde
+    // el motor ya casi no se ve.
+    capas: 6,
+    // MÁS LARGO Y MÁS FINO. Con largo 7 sobre un radio de 2,5 el chorro medía menos de tres veces
+    // su anchura: a esa proporción cualquier cosa se lee como una LLAMA. Un escape de tobera se
+    // reconoce por ser desproporcionadamente largo. 9,5 sobre 2,15 son 4,4 anchuras, y el final
+    // queda fuera de cuadro, que es justo lo que hace falta: un chorro no "termina", se sale.
+    // 12, no 9,5. La cola se apaga ahora a NEGRO en el último 30 % (ver `pintaColores`), así que
+    // el trozo que de verdad se ve es más corto que la geometría; sin alargarla, el chorro
+    // terminaba dentro del cuadro. Lo que se ve tiene que salirse SIEMPRE.
+    largo: 12,       // unidades de motor, DESDE EL LABIO (la campana mide 3,3 de largo)
+    radio: 2.15,     // nace con el radio de la boca de la campana (2,10) y de ahí solo se estrecha
+    // CELDAS DE CHOQUE. Un chorro sobreexpandido se estrangula y se vuelve a hinchar varias veces
+    // al salir, con la barriga cada vez más floja. Es EL rasgo que distingue un escape de una
+    // llama, y es geometría, así que sale gratis en el perfil de revolución.
+    celdas: 4,       // cuántos estrangulamientos a lo largo del chorro
+    celda: 0.36,     // cuánto cierra el primero (los siguientes se amortiguan solos)
+    diamantes: 3,    // los rombos brillantes van EN los estrangulamientos, no repartidos a ojo
     parpadeoHz: [0.21, 0.53] as [number, number],
     parpadeo: [0.06, 0.035] as [number, number],
     estira: 1.35,

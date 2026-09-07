@@ -35,7 +35,18 @@ html.js:not(.is-ready) .capa { visibility: hidden; }
 
 /* Hero */
 #hero { display: grid; place-items: center; pointer-events: none; }
-#hero .intro { text-align: center; padding: 2rem; pointer-events: auto; }
+#hero .intro {
+  text-align: center; padding: 2rem 2.5rem 3rem; pointer-events: auto;
+  /* VELO. El motor se ensambla POR DETRÁS del título mientras el hero se va, y el gris del objeto
+     y el gris de la letra son el mismo: en la captura esc-02 el titular "yoiber." y las dos líneas
+     de abajo caían sobre la cámara de combustión y no se leían. Un velo del color del fondo, sin
+     borde, devuelve el contraste sin pintar una caja encima del objeto. Se va con el hero, porque
+     es hijo suyo. */
+  background: radial-gradient(ellipse 78% 62% at 50% 42%,
+    color-mix(in srgb, var(--bg) 92%, transparent) 0%,
+    color-mix(in srgb, var(--bg) 74%, transparent) 52%,
+    transparent 78%);
+}
 h1 {
   margin: 0;
   font-size: clamp(3rem, 12vw, 9rem);

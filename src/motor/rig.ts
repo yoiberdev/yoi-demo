@@ -1,10 +1,10 @@
 import {
   AmbientLight, Color, DirectionalLight, DoubleSide, Group, HemisphereLight, InstancedMesh, Matrix4,
-  MeshBasicMaterial, MeshLambertMaterial, Object3D, OrthographicCamera, PointLight,
+  LineBasicMaterial, MeshBasicMaterial, MeshLambertMaterial, Object3D, OrthographicCamera, PointLight,
   Quaternion, Scene, Vector3, type Material,
 } from 'three';
 import { PM } from '../params-motor';
-import { crearMotor, calidad as calidadGeometria, M, type Calidad, type Motor } from './geometria';
+import { aplicarTema, crearMotor, calidad as calidadGeometria, M, type Calidad, type Motor } from './geometria';
 
 // EL CONTRATO ENTRE LA GEOMETRÍA Y LA COREOGRAFÍA
 // ===============================================================================================
@@ -14,10 +14,15 @@ import { crearMotor, calidad as calidadGeometria, M, type Calidad, type Motor } 
 //
 // Jerarquía, y el porqué de cada nivel:
 //   escena
-//     └ raiz        <- lo ÚNICO que anima la timeline maestra (x, y, rotateX, rotateY, scale)
-//         └ sacudida <- SOLO el temblor del encendido, escrito en absoluto desde aplicar()
+//     └ desvio      <- SOLO el desvío de la galería, escrito en absoluto desde aplicar(). Va por
+//                      ENCIMA de `raiz` porque es un desplazamiento de ENCUADRE (unidades de
+//                      pantalla, ajeno a la escala del objeto) y porque su valor depende del
+//                      tamaño del lienzo, que la timeline no conoce: en un móvil de pie no hay
+//                      3,2 u de sitio a los lados y el hueco hay que hacerlo arriba.
+//         └ raiz        <- lo ÚNICO que anima la timeline maestra (x, y, rotateX, rotateY, scale)
+//             └ sacudida <- SOLO el temblor del encendido, escrito en absoluto desde aplicar()
 //             └ centrado <- offset fijo: el motor está construido con la garganta en y=0 y su
-//                           centro geométrico en y=+0,78; esto lo baja para que quede encuadrado
+//                           centro geométrico en y=-0,11; esto lo sube para que quede encuadrado
 //                 └ motor.grupo  (las piezas, tal cual las deja geometria.ts)
 // Separar `sacudida` de `raiz` es lo que hace el temblor reversible: sumado a `raiz.position` se
 // acumularía en los fotogramas en que la timeline no reescribe esa propiedad, y al arrastrar hacia
@@ -36,14 +41,17 @@ export interface PiezaRig {
 }
 
 /** Un tubo de la corona. NO es un Object3D: la corona entera es UNA InstancedMesh (1 llamada de
- *  dibujo para 36 tubos). La timeline anima `z` (desplazamiento RADIAL) de estos objetos planos y
- *  `escribirTubos()` compone las matrices. Anime.js anima cualquier objeto plano, así que el
- *  escalonado `stagger(..., { from: 'center' })` funciona igual. */
+ *  dibujo para 36 tubos). La timeline anima `z` (desplazamiento RADIAL, por el azimut del propio
+ *  tubo) de estos objetos planos y `escribirTubos()` compone las matrices. Anime.js anima
+ *  cualquier objeto plano, así que el retardo por tubo se reparte igual; eso sí, NO con
+ *  `stagger(..., { from })`, que reparte por índice (ver `azimutes` y coreografia.ts). */
 export interface TuboRig { z: number }
 
 export interface Rig {
   escena: Scene;
   camara: OrthographicCamera;
+  /** Desvío de encuadre de la galería. Lo escribe `aplicar()` en absoluto, nunca la timeline. */
+  desvio: Group;
   raiz: Group;
   sacudida: Group;
   motor: Motor;
@@ -52,6 +60,10 @@ export interface Rig {
   /** Piezas que se despiezan sin rótulo (la placa de identificación). */
   sueltas: PiezaRig[];
   tubos: TuboRig[];
+  /** Azimut de cada tubo en el marco del motor, en GRADOS (0 = +X, 90 = +Z). La coreografía
+   *  reparte por AQUÍ el retardo de entrada de la corona: el índice del tubo no vale, porque el
+   *  ángulo del tubo i no es i·360/n (ver escribirTubos). */
+  azimutes: number[];
   /** Los tres paneles radiadores: se abren en abanico dentro de su grupo. */
   aspas: Object3D[];
   /** La marca: la placa de identificación con el monograma. Ver PM.marca. */
@@ -77,6 +89,8 @@ export interface Rig {
   cuerpos: Material[];
   /** Escribe las matrices de la corona a partir de `tubos[i].z`. Función pura de esos valores. */
   escribirTubos(): void;
+  /** Repinta las dos tintas (aristas y casco de silueta) al cambiar el tema de la página. */
+  tema(claro: boolean): void;
   disponer(ancho: number, alto: number): void;
   liberar(): void;
 }
@@ -89,6 +103,8 @@ export function construirRig(nivel: Calidad): Rig {
   camara.position.set(...PM.motor.camara);
   camara.lookAt(0, 0, 0);
 
+  const desvio = new Group();
+  desvio.name = 'desvio';
   const raiz = new Group();
   raiz.name = 'raiz';
   const sacudida = new Group();
@@ -98,7 +114,8 @@ export function construirRig(nivel: Calidad): Rig {
   centrado.position.y = PM.motor.centro;
   raiz.add(sacudida);
   sacudida.add(centrado);
-  escena.add(raiz);
+  desvio.add(raiz);
+  escena.add(desvio);
 
   const motor = crearMotor();
   centrado.add(motor.grupo);
@@ -109,7 +126,10 @@ export function construirRig(nivel: Calidad): Rig {
   // que este adaptador hace sobre lo que devuelve geometria.ts.
   // -------------------------------------------------------------------------------------------
   const cuerpos: Material[] = [];
-  for (const clave of ['blanco', 'medio', 'oscuro', 'acento', 'linea', 'caliente'] as const) {
+  // 'silueta' va en la lista: es un material mas del objeto para el fundido final. Si se quedara
+  // fuera, al desvanecerse el motor los cascos seguirian opacos y quedaria una silueta de tinta
+  // flotando sobre el fondo, que es exactamente el fallo que el contorno viene a arreglar.
+  for (const clave of ['blanco', 'medio', 'oscuro', 'acento', 'linea', 'silueta', 'caliente'] as const) {
     cuerpos.push(transparentar(motor.materiales[clave] as Material));
   }
   const emisivos = [motor.materiales.acento as MeshLambertMaterial];
@@ -176,12 +196,37 @@ export function construirRig(nivel: Calidad): Rig {
   const pTubo = new Vector3();
   const eTubo = new Vector3(1, 1, 1);
   const ejeY = new Vector3(0, 1, 0);
+
+  // POR DÓNDE SALE CADA TUBO. Tiene que ser SU PROPIO radio, y no lo era.
+  //
+  // La instancia i se coloca girando el tubo base con Ry(θ), θ = i·2π/n. Un giro de Three sobre Y
+  // lleva el azimut φ a φ−θ, y el tubo base NO está en azimut 0: su centro está en +18,8°
+  // (medido sobre `boundingSphere` de la geometría; la curva del tubo es helicoidal). O sea que la
+  // instancia i acaba en el azimut 18,8°−θ mientras el desplazamiento se escribía en +θ. Los dos
+  // ángulos giran en SENTIDOS CONTRARIOS: solo coinciden en dos tubos de los 36 y en los de la
+  // mitad del anillo el tubo salía disparado hacia el otro lado del motor, cruzándose con sus
+  // vecinos. Se veía: en el abanico de la entrada los tubos se montaban unos sobre otros formando
+  // aspas (captura img/D-5250.png, antes de este arreglo), en vez de abrirse como una corona.
+  //
+  // Arreglo: el desplazamiento se define en el espacio del TUBO BASE y se gira con él. Así cada
+  // tubo va y viene por su propio radio, hagan lo que hagan la geometría o el número de tubos.
+  const geoTubo = malla.geometry;
+  if (!geoTubo.boundingSphere) geoTubo.computeBoundingSphere();
+  const c = geoTubo.boundingSphere?.center;
+  const dirBase = new Vector3(c?.x ?? 1, 0, c?.z ?? 0);
+  if (dirBase.lengthSq() < 1e-8) dirBase.set(1, 0, 0);
+  dirBase.normalize();
+  const azimutes: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const th = (i * 360) / n;
+    azimutes.push((((Math.atan2(dirBase.z, dirBase.x) * 180) / Math.PI - th) % 360 + 360) % 360);
+  }
   function escribirTubos(): void {
     for (let i = 0; i < n; i++) {
       const th = (i * Math.PI * 2) / n;
       const d = tubos[i].z;
       qTubo.setFromAxisAngle(ejeY, th);
-      pTubo.set(Math.cos(th) * d, 0, Math.sin(th) * d);
+      pTubo.copy(dirBase).multiplyScalar(d).applyQuaternion(qTubo);
       malla.setMatrixAt(i, mTubo.compose(pTubo, qTubo, eTubo));
     }
     malla.instanceMatrix.needsUpdate = true;
@@ -198,11 +243,15 @@ export function construirRig(nivel: Calidad): Rig {
   const materialesMarca: Material[] = [];
   const emisivosMarca: MeshLambertMaterial[] = [];
   const chapaMarca: Material[] = [];
+  const lineasMarca: LineBasicMaterial[] = [];
   marca.traverse((o) => {
     const con = o as { material?: Material };
     if (!con.material) return;
     const clon = transparentar(con.material.clone());
     if (o.name === 'placa-chapa' || o.name === 'aristas-placa-chapa') chapaMarca.push(clon);
+    // La placa lleva materiales CLONADOS, así que el repintado por tema no la alcanzaría: sus
+    // aristas se quedarían con la tinta del tema oscuro en el capítulo claro. Se apuntan aquí.
+    if (o.name.startsWith('aristas-')) lineasMarca.push(clon as LineBasicMaterial);
     const lam = clon as MeshLambertMaterial;
     if (lam.isMeshLambertMaterial) {
       lam.emissive = lam.color.clone();
@@ -215,6 +264,11 @@ export function construirRig(nivel: Calidad): Rig {
   });
 
   const turbina = motor.piezas['turbobomba-turbina'] ?? new Group();
+
+  function tema(claro: boolean): void {
+    aplicarTema(motor.materiales, claro);
+    for (const mat of lineasMarca) mat.color.copy(motor.materiales.linea.color);
+  }
 
   function disponer(ancho: number, alto: number): void {
     let h = PM.motor.encuadre / 2;
@@ -237,10 +291,10 @@ export function construirRig(nivel: Calidad): Rig {
   }
 
   return {
-    escena, camara, raiz, sacudida, motor, piezas, sueltas, tubos, aspas, marca, materialesMarca,
+    escena, camara, desvio, raiz, sacudida, motor, piezas, sueltas, tubos, azimutes, aspas, marca, materialesMarca,
     emisivosMarca, chapaMarca, turbina, luzClave, luzCamara, emisivos, caliente, cuerpos,
     yLabio: -M.tobera.largo,
-    escribirTubos, disponer, liberar,
+    escribirTubos, tema, disponer, liberar,
   };
 }
 

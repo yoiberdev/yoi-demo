@@ -10,9 +10,21 @@ import type { Estado } from './coreografia';
 // Sin postprocesado (ni EffectComposer, ni bloom, ni un solo shader nuestro) y sin partículas (que
 // habría que sembrar con azar, que es lo contrario de un scrub reversible).
 //
-// TÉCNICA: GEOMETRÍA. Cuatro campanas de revolución encajadas (LatheGeometry) pintadas con color
-// por vértice del blanco al negro y dibujadas con mezcla ADITIVA y sin escribir en el z-buffer.
-// Más cinco octaedros en el eje que hacen de diamantes de Mach.
+// TÉCNICA: GEOMETRÍA. Cuatro husos de revolución encajados (LatheGeometry) pintados con color por
+// vértice del blanco al negro y dibujados con mezcla ADITIVA y sin escribir en el z-buffer. Más
+// tres octaedros en el eje, en los cuellos, que hacen de diamantes de Mach.
+//
+// QUÉ SE ARREGLÓ AQUÍ, porque el resultado anterior "se leía como una llama de vela" y era verdad:
+// el perfil se ENSANCHABA a media altura por encima del radio de la boca y luego se cerraba, o sea
+// una gota; con el núcleo blanco dentro y la envolvente naranja apagada (marrón, con mezcla
+// aditiva) alrededor, el conjunto era exactamente una bombilla encendida (img/P0-20250.png). Las
+// tres cosas que lo convierten en un escape, por orden de peso:
+//   1) FORMA: el perfil ya no ensancha nunca, y lleva celdas de choque (ver `perfil`).
+//   2) PROPORCIÓN: 9,5 de largo por 2,15 de radio, y el final se sale del cuadro. Un chorro no
+//      termina en punta: se va.
+//   3) DEGRADADO: el borde de cada capa es un escalón duro y no hay forma de evitarlo sin shader,
+//      así que el degradado radial se hace con cuatro capas que se apagan a ritmos distintos
+//      (ver `pintaColores`), y la de fuera se apaga la primera.
 //
 // Se probó también con "cortinas" (planos girados con una textura de degradado) y FALLA POR
 // GEOMETRÍA, no por gusto: los planos son cuadriláteros que salen de la garganta, que está DENTRO
@@ -32,54 +44,107 @@ export interface Penacho {
 }
 
 const CALIENTE = new Color(0xfff3d6);
-const MEDIO = new Color(0xff9a3c);
-// El FRIO era 0x8a3410 y con mezcla aditiva sobre negro la capa exterior salia MARRON SUCIO.
-// Naranja vivo: al sumarse capa sobre capa da fuego, no barro.
-const FRIO = new Color(0xd2510e);
-const NEGRO = new Color(0x000000);
+// El ámbar de la marca (M.paleta.acento es 0xffd166): el escape es el único sitio del demo donde
+// el acento ocupa área, y tiene que ser EL MISMO ámbar que los zunchos y el anillo de garganta.
+const MEDIO = new Color(0xffc25e);
+// El FRIO era 0xd2510e (y antes 0x8a3410). Con mezcla aditiva sobre negro, el color que se ve es
+// exactamente color x opacidad: un naranja oscuro al 18 % da (0,24 · 0,09 · 0,02), o sea MARRÓN.
+// La capa ancha salía como un huevo marrón con borde duro. Se arregla por los dos lados: naranja
+// mucho más vivo aquí, y la capa ancha bajada al 6 % (ver `opacidadCapa`).
+const FRIO = new Color(0xff7a1e);
 
 /**
  * Perfil de media pluma de gases, MEDIDO DESDE EL LABIO DE LA CAMPANA (no desde la garganta).
  *
- * Tres cosas comprobadas en captura, cada una con su corrección:
- *   · naciendo en la garganta y con el perfil abriéndose despacio, el chorro salía MÁS ESTRECHO
- *     que la boca y quedaba un anillo negro bajo el labio: el objeto entero se leía como una
- *     lámpara de sobremesa encendida;
- *   · abriéndolo desde la garganta para taparlo, la pluma se comía la campana por fuera (el cono
- *     naranja envolvía la tobera) porque a media altura ya era más ancha que ella;
- *   · con el perfil abriéndose hasta el final, la silueta acaba en un corte recto (un trapecio).
- * Solución: el penacho EMPIEZA en el plano de salida, con el radio de la boca, y a partir de ahí
- * no para de estrecharse. Nace pegado al labio y no toca la campana en ningún punto.
+ * ESTO ES LO QUE SEPARA UN ESCAPE DE UNA LLAMA, y es forma, no color. El perfil anterior tenía un
+ * término `abre` (0,82 -> 1,00) que ensanchaba la pluma a media altura por encima del radio de la
+ * boca y luego la cerraba: una gota. Con la cola llegando a cero y el núcleo blanco en el centro,
+ * el resultado era literalmente una bombilla encendida (captura img/P0-20250.png).
+ *
+ * El perfil nuevo tiene dos términos y ninguno de los dos ensancha nunca:
+ *   · `afila`: el chorro nace con el radio de la boca y se estrecha sin parar. Monótono.
+ *   · `celdas`: los estrangulamientos de las celdas de choque. Un chorro que sale sobreexpandido
+ *     se comprime, se vuelve a hinchar y así varias veces, amortiguándose (`exp(-3,2u)`). Es un
+ *     COSENO RECTIFICADO, entre 0 y 1: solo puede cerrar, nunca abrir por encima de la boca.
+ * Las dos cosas juntas dan la silueta arrosariada de un escape a presión, y a la vez respetan lo
+ * que ya estaba comprobado: nace pegado al labio, con el radio de la boca, y no toca la campana.
  */
 function perfil(radio: number, largo: number, ondas: number): Vector2[] {
   const p: Vector2[] = [];
-  const n = 26;
+  const n = 40;   // 26 puntos se comían los estrangulamientos: quedaban facetas, no cuellos
+  const P = PM.penacho;
   for (let i = 0; i <= n; i++) {
     const u = i / n;
-    const cierra = 1 - 0.86 * Math.max(0, (u - 0.12) / 0.88) ** 1.25;
-    const abre = 0.82 + 0.18 * (1 - (1 - u) ** 2);
-    const r = radio * abre * cierra * (1 - ondas * Math.sin(u * Math.PI * 2.5) * 0.10);
-    p.push(new Vector2(Math.max(0.004, r), -u * largo));
+    const afila = 0.06 + 0.94 * (1 - u) ** 1.45;
+    const celdas = 1 - P.celda * 0.5 * (1 - Math.cos(u * Math.PI * 2 * P.celdas)) * Math.exp(-u * 3.2);
+    const r = radio * afila * celdas * (1 - ondas * Math.sin(u * Math.PI * 2.5) * 0.06);
+    p.push(new Vector2(Math.max(0.003, r), -u * largo));
   }
   return p;
 }
 
-function pintaColores(geo: BufferGeometry, largo: number): void {
+/**
+ * Color por vértice de una capa: temperatura por la altura, y un DESVANECIDO propio por capa.
+ *
+ * Aquí está el arreglo del faldón marrón, y no es bajarle la opacidad a la capa ancha sin más.
+ * Con mezcla aditiva lo que se ve es color x opacidad, así que una capa tenue de naranja apagado
+ * es literalmente marrón oscuro, y con `DoubleSide` su borde es un ESCALÓN (dos caras dentro,
+ * ninguna fuera). Bajarle la opacidad a secas arreglaba el faldón y rompía otra cosa: la capa
+ * ancha es la que llena la BOCA de la campana, y al apagarla quedaba un anillo negro entre el
+ * labio y el chorro —el fallo de la "lámpara de sobremesa" que ya estaba anotado en este fichero—.
+ *
+ * Solución: la capa conserva opacidad suficiente para llenar la boca, y el degradado va en el
+ * COLOR, con un exponente distinto por capa (`caida`). Las de fuera se apagan deprisa: pintan el
+ * halo justo donde el gas está blanco, junto al labio, y a media pluma ya son negras (o sea,
+ * invisibles con mezcla aditiva). Las de dentro aguantan. El resultado es un degradado radial
+ * hecho con cuatro superficies opacas, que es lo más parecido a un shader que se puede hacer sin
+ * escribir uno.
+ *
+ * @param caida exponente del desvanecido: 3,6 en la capa ancha, 0,8 en el núcleo.
+ */
+function pintaColores(geo: BufferGeometry, largo: number, caida: number, calor: number): void {
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
   const c = new Color();
   for (let i = 0; i < pos.count; i++) {
     const u = MathUtils.clamp(-pos.getY(i) / largo, 0, 1);
-    // La cola tiene que llegar a NEGRO: con mezcla aditiva, negro = invisible. Si el último anillo
-    // conserva color, la pluma acaba en un borde duro por muy oscuro que sea.
-    // El tramo caliente es LARGO y el frío corto: con el reparto anterior la capa exterior pasaba
-    // media pluma en el naranja apagado y, sumada sobre negro a baja opacidad, se leía marrón.
-    if (u < 0.32) c.copy(CALIENTE).lerp(MEDIO, u / 0.32);
-    else if (u < 0.74) c.copy(MEDIO).lerp(FRIO, (u - 0.32) / 0.42);
-    else c.copy(FRIO).lerp(NEGRO, ((u - 0.74) / 0.26) ** 0.7);
+    // temperatura: blanco en la boca, ámbar de la marca enseguida, naranja después.
+    // El NARANJA es solo del núcleo (`calor` = 1). Las capas de fuera se quedan en ámbar, y no por
+    // gusto: con mezcla aditiva lo que se ve es color x opacidad, así que un naranja al 12 % da un
+    // marrón oliva —medido en el recorte a 6x: RGB (42, 32, 15)— y esa era la "funda de plástico
+    // color café" que rodeaba el chorro. El mismo brillo en ámbar da un halo cálido.
+    if (u < 0.16) c.copy(CALIENTE).lerp(MEDIO, u / 0.16);
+    else c.copy(MEDIO).lerp(FRIO, MathUtils.clamp((u - 0.16) / 0.46, 0, 1) * calor);
+    // Y el desvanecido. Tiene que llegar a NEGRO dentro de la geometría: con mezcla aditiva negro
+    // es invisible, y así el chorro se apaga en vez de cortarse cuando cruza el borde del cuadro.
+    //
+    // `cola` es el arreglo del PICO. Con solo (1-u)^caida el núcleo seguía al 16 % de brillo en
+    // u = 0,9, o sea claramente visible sobre negro justo donde el perfil se cierra en aguja: el
+    // chorro TERMINABA EN PUNTA dentro del cuadro y eso es una vela, no un motor (esc-23). Al
+    // cuadrado, la rampa llega a cero con pendiente cero: no hay vértice final que se vea, el
+    // chorro se deshace.
+    const cola = MathUtils.clamp((1 - u) / 0.3, 0, 1);
+    c.multiplyScalar((1 - u) ** caida * cola * cola);
     col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new BufferAttribute(col, 3));
+}
+
+/** Opacidad de la capa i de n: la ancha tenue, el núcleo casi opaco. La curva del degradado
+ *  radial la pone `pintaColores`; esto solo reparte cuánto pesa cada superficie. */
+function opacidadCapa(i: number, n: number): number {
+  // El 4/n mantiene la SUMA de opacidades igual que con las cuatro capas de antes: con mezcla
+  // aditiva, más capas al mismo peso es un chorro más brillante, y el núcleo ya se satura a blanco.
+  return Math.min(0.9, (0.1 + 0.75 * (n > 1 ? i / (n - 1) : 1) ** 1.3) * (4 / n));
+}
+
+/** Radio de la capa i (f = 0 la ancha, f = 1 el núcleo) como fracción del radio del chorro.
+ *  Los radios NO se reparten a partes iguales: con el reparto lineal (1 / 0,81 / 0,62 / 0,43) la
+ *  banda entre la envolvente y la siguiente medía el 19 % del radio, y esa franja de naranja
+ *  apagado —o sea marrón— era el faldón que rodeaba el chorro. Las dos de fuera van casi pegadas
+ *  y el salto grande se lo lleva el núcleo, que es donde hay brillo para taparlo. */
+function radioCapa(f: number): number {
+  return 1 - 0.57 * f ** 1.55;
 }
 
 /**
@@ -101,20 +166,29 @@ export function crearPenacho(yLabio: number, pocasCapas = false): Penacho {
   const escalaBase: Vector3[] = [];
   const diamantes: Mesh[] = [];
 
-  const nCapas = pocasCapas ? Math.max(2, Math.round(PM.penacho.capas / 2)) : PM.penacho.capas;
+  // CUATRO en móvil, no dos. Con dos capas el reparto de radios deja al descubierto media anchura del
+  // chorro cubierta SOLO por la envolvente, y la envolvente a solas es casi negra: en las capturas
+  // de móvil el penacho leía como humo sucio o como una estaca de madera (mov-20, mov-21). La
+  // tercera capa es una llamada de dibujo más y es lo que hace que se lea como gas caliente.
+  const nCapas = pocasCapas ? 4 : PM.penacho.capas;
   for (let i = 0; i < nCapas; i++) {
-    const k = 1 - i * 0.19;   // capas más juntas: con 0,26 se veían las cuatro como bandas duras
+    const f = nCapas > 1 ? i / (nCapas - 1) : 1;
+    const k = radioCapa(f);
     const largo = PM.penacho.largo * (0.7 + 0.3 * k);
-    const geo = new LatheGeometry(perfil(PM.penacho.radio * k, largo, i === 0 ? 0 : 1), 24);
-    pintaColores(geo, largo);
+    const geo = new LatheGeometry(perfil(PM.penacho.radio * k, largo, i === 0 ? 0 : 1), 28);
+    pintaColores(geo, largo, 3.6 - 2.8 * f, f);
     // La capa MÁS ANCHA es la más tenue y la del núcleo la más intensa: al revés se ve un trapecio
-    // recortado, no un chorro.
-    // la capa MÁS ANCHA es la más tenue (al revés se ve un trapecio recortado, no un chorro)
-    const op = 0.18 + i * (0.72 / Math.max(1, nCapas - 1));
+    // recortado, no un chorro. El reparto NO es lineal, ver opacidadCapa().
+    const op = opacidadCapa(i, nCapas);
     const mat = new MeshBasicMaterial({
       vertexColors: true, blending: AdditiveBlending, depthWrite: false,
       transparent: true, side: pocasCapas && i > 0 ? FrontSide : DoubleSide, opacity: op,
     });
+    // `transparent` + `DoubleSide` hace que Three dibuje la malla DOS VECES (traseras y luego
+    // delanteras, para ordenarlas). Con mezcla ADITIVA el orden da exactamente igual —la suma es
+    // conmutativa—, así que la pasada doble no aporta nada y cuesta una llamada por capa: medido,
+    // 8 llamadas del penacho en vez de 4 (68 contra 64 en el fotograma del encendido).
+    mat.forceSinglePass = true;
     const malla = new Mesh(geo, mat);
     malla.frustumCulled = false;
     obj.add(malla);
@@ -129,17 +203,24 @@ export function crearPenacho(yLabio: number, pocasCapas = false): Penacho {
   geometrias.push(geoD);
   // Los diamantes de Mach son un DETALLE dentro del chorro, no una figura.
   const matDiamante = new MeshBasicMaterial({
-    color: 0xffe9c4, blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3,
+    color: 0xfff1d2, blending: AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.3,
   });
   materiales.push(matDiamante);
+  // VAN EN LOS CUELLOS, no repartidos a ojo. El perfil estrangula donde el coseno de `celdas` vale
+  // -1, o sea en u = (2m-1) / (2·celdas): ahí es donde el gas se comprime y donde brilla. Antes
+  // eran siete rombos diminutos (0,075 del radio) colocados por interpolación y no se veía ni uno.
   for (let i = 0; i < PM.penacho.diamantes; i++) {
     const d = new Mesh(geoD, matDiamante);
-    const u = ((i + 0.7) / PM.penacho.diamantes) * 0.62;
-    // Mas pequenos, mas numerosos y DECRECIENTES: con dos rombos grandes parecian dos artefactos
-    // blancos macizos dentro del chorro, no diamantes de Mach.
-    const s = PM.penacho.radio * (1 - u * 1.15) ** 1.3;
+    const u = (2 * i + 1) / (2 * PM.penacho.celdas);
+    // Ancho del cuello en ese punto, con la misma fórmula del perfil, y ceñido al RADIO DEL
+    // NÚCLEO: el rombo tiene que caber dentro de la capa más brillante. Iba a 0,62 del radio del
+    // chorro y el núcleo está en 0,43, así que sobresalía y caía sobre las capas de fuera, que son
+    // casi negras: en vez de un destello se veía un LOSANGE GRIS. En el móvil, donde solo quedan
+    // dos capas y no hay medios tonos, era descarado (img/z-baja.png, antes del arreglo).
+    const afila = 0.06 + 0.94 * (1 - u) ** 1.45;
+    const s = PM.penacho.radio * afila * (1 - PM.penacho.celda * Math.exp(-u * 3.2)) * radioCapa(1);
     d.position.y = -u * PM.penacho.largo;
-    d.scale.set(s * 0.075, s * 0.15, s * 0.075);
+    d.scale.set(s * 0.85, s * 2.1, s * 0.85);
     d.frustumCulled = false;
     obj.add(d);
     diamantes.push(d);
@@ -156,7 +237,19 @@ export function crearPenacho(yLabio: number, pocasCapas = false): Penacho {
       // del fotograma anterior y el objeto conserva estado entre pasadas. Medido con la prueba de
       // reversibilidad: con el `return` a secas, 386 de 421 paradas daban un grafo distinto al
       // volver aunque en pantalla no se viera nada.
+      //
+      // Y hay que reponer TODO lo que escribe la rama de abajo, no solo la escala del grupo: la
+      // escala y la opacidad de cada capa y los rombos. Con solo el grupo, la prueba seguía dando
+      // 155 paradas de 169 distintas al volver (la primera, en t=19250: una capa con escala
+      // 1,048903 de ida y 1 de vuelta, el bamboleo del último fotograma encendido que se quedaba
+      // pegado). El estado del grafo no puede depender de POR DÓNDE se ha llegado a este instante.
       obj.scale.set(0, 0, 0);
+      for (let i = 0; i < capas.length; i++) {
+        capas[i].scale.copy(escalaBase[i]);
+        (capas[i].material as MeshBasicMaterial).opacity = 0;
+      }
+      matDiamante.opacity = 0;
+      for (const d of diamantes) d.visible = false;
       return;
     }
     const largo = a * (1 + estado.estira * PM.penacho.estira);
@@ -176,7 +269,11 @@ export function crearPenacho(yLabio: number, pocasCapas = false): Penacho {
   }
 
   function ligero(on: boolean): void {
-    for (let i = 0; i < capas.length; i++) capas[i].visible = !on || i >= capas.length - 2;
+    // Se queda la ENVOLVENTE y las dos del núcleo, no "las dos últimas". Quitando la envolvente,
+    // la boca de la campana deja de estar llena y queda un anillo negro entre el labio y el chorro:
+    // es el fallo de la "lámpara de sobremesa" que ya está anotado arriba en este fichero.
+    const n = capas.length;
+    for (let i = 0; i < n; i++) capas[i].visible = !on || i === 0 || i >= n - 2;
   }
 
   function liberar(): void {

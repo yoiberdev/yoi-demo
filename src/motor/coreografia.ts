@@ -1,4 +1,3 @@
-import { stagger } from 'animejs';
 import { Color, MathUtils, Quaternion, Vector3, type Material, type MeshLambertMaterial, type Object3D } from 'three';
 import { PM } from '../params-motor';
 import { M } from './geometria';
@@ -41,6 +40,7 @@ export interface Estado {
   brillo: number;   // 0..1  la garganta al rojo en el encendido
   rpm: number;      // 0..1  vueltas de la turbobomba
   logo: number;     // 0..1  la placa del monograma viene al frente
+  aparta: number;   // 0..1  el motor se desvía para dejar hueco en la galería (dirección: aplicar)
   vibra: number;    // 0..1  amplitud del temblor previo al despegue
   penacho: number;  // 0..1  crecimiento del penacho
   estira: number;   // 0..1  estirado del penacho al salir
@@ -79,7 +79,7 @@ const ENTRADA: Record<string, [number, number, number]> = {
 // constantes salen de los extremos del propio SVG precocinado (viewBox 439x523, junta en
 // 141,84 / 229,35) y se escalan con el alto que fije la geometría.
 const K_MARCA = M.placa.alto / 523;
-const CENTRO_MARCA = new Vector3(78.4335 * K_MARCA, -32.0905 * K_MARCA, M.placa.espesor / 2);
+const CENTRO_MARCA = new Vector3(77.5800 * K_MARCA, -32.0905 * K_MARCA, M.placa.espesor / 2);
 const ALTO_MARCA = 522.881 * K_MARCA;
 
 export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
@@ -94,7 +94,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
 
   const estado: Estado = {
     luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0,
-    logo: 0, vibra: 0, penacho: 0, estira: 0, salida: 0,
+    logo: 0, aparta: 0, vibra: 0, penacho: 0, estira: 0, salida: 0,
     rotulos: rig.piezas.map(() => ({ t: 0 })),
   };
 
@@ -129,7 +129,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   const I = C.intro;
   tl.set(raiz, { x: 0, y: 0, rotateX: 0, rotateY: I.rotY[0], rotateZ: 0, scale: I.escala[0] }, 0)
     .set(cam, { zoom: I.zoom }, 0)
-    .set(estado, { luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0, logo: 0, vibra: 0, penacho: 0, estira: 0, salida: 0 }, 0)
+    .set(estado, { luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0, logo: 0, aparta: 0, vibra: 0, penacho: 0, estira: 0, salida: 0 }, 0)
     .set(estado.rotulos, { t: 0 }, 0);
   for (const s of sitios) tl.set(s.p.obj, { x: s.entrada.x, y: s.entrada.y, z: s.entrada.z }, 0);
   for (const a of abanico) tl.set(a.o, { x: a.reposo.x, z: a.reposo.z }, 0);
@@ -145,19 +145,36 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       duration: I.dur, ease: I.ease,
     }, m.L.HERO_OUT + I.base + i * I.paso);
   });
-  // La corona entra la última y tubo a tubo, desde el centro hacia los lados, cerrándose sobre la
-  // campana con un pellizco de rebote. Es el gesto que hay que mirar.
+  // La corona entra la última y tubo a tubo, cerrándose sobre la campana con un pellizco de rebote.
+  // Es el gesto que hay que mirar.
   // El rebote sale del EASE (`outBack` se pasa de largo y vuelve), no de dos tramos encadenados:
   // en el instante exacto en que se tocan dos tramos el valor no es idéntico de ida y de vuelta.
-  // `from: 'first'`, NO `from: 'center'`. El índice del tubo ES su ángulo (th = i·2π/36), así que
-  // 'center' arranca por el índice 18 —o sea, θ=180°, la parte de ATRÁS— y termina por los índices
-  // 0 y 35, que son el frente: durante todo el gesto la corona está desequilibrada y en la captura
-  // de referencia todos los tubos se amontonaban a un lado. Con 'first' la ola recorre el anillo
-  // una vuelta entera y se lee como una cremallera cerrándose, que es justo lo que se quiere.
+  //
+  // NINGÚN `stagger(paso, { from })` sirve aquí, y la razón es geométrica, no de gusto: `stagger`
+  // reparte por ÍNDICE, y el índice del tubo es (casi) su ángulo. Como la entrada es RADIAL, en
+  // pantalla los tubos de los COSTADOS cruzan todo el ancho mientras los del frente y el fondo
+  // apenas se mueven (vienen y van en profundidad). Un reparto por índice recorre el anillo en un
+  // solo sentido: con 'center' empieza por el fondo y acaba en el frente, con 'first' arranca en un
+  // costado y da la vuelta entera. En los dos casos, en cualquier instante media corona está dentro
+  // y la otra media fuera, y por el mismo costado; medido en captura al 20 %, al 30 % y al 50 %
+  // (img/I-5250, I-5400, I-5700): a un lado los tubos ya aterrizados y al otro un abanico suelto
+  // colgando en el vacío.
+  //
+  // El reparto va por ÁNGULO RESPECTO A LA CÁMARA: cada tubo entra a la vez que su simétrico al
+  // otro lado del eje de vista, así que la corona está EQUILIBRADA izquierda-derecha en todos los
+  // fotogramas del gesto y la ola avanza en profundidad, del fondo hacia el frente.
+  const reparto = (span: number, desde: 'frente' | 'detras') =>
+    // (la firma de `FunctionValue` trae los cuatro argumentos opcionales: `i` necesita valor por defecto)
+    (_o: unknown, i = 0): number => {
+      // el azimut del tubo i NO es i·360/n: lo da el rig, que es quien sabe cómo está construido
+      const th = rig.azimutes[i] ?? 0;
+      const d = Math.abs(((th - I.coronaAzimut + 540) % 360) - 180);   // 0..180 hasta el eje de vista
+      return (desde === 'detras' ? 1 - d / 180 : d / 180) * span;
+    };
   const tCorona = m.L.HERO_OUT + I.base + montaje.length * I.paso;
   tl.add(rig.tubos, {
     z: [I.coronaFuera, 0], duration: I.coronaDur, ease: `outBack(${I.coronaRebote})`,
-    delay: stagger(I.coronaPaso, { from: 'first' }),
+    delay: reparto(I.coronaReparto, I.coronaDesde),
   }, tCorona);
 
   // ============================================================ HERO_OUT: toma el centro
@@ -176,10 +193,17 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   const G = C.galeria;
   const dG = m.duracion('GALERIA');
   const yGal = H.rotY[1] + G.giro;
+  // EL DESVÍO NO ES UN TWEEN SOBRE `raiz.x`. Lo era, y ese es el fallo: `apartar` estaba escrito en
+  // unidades de motor y la timeline no sabe cuánto mide el encuadre, que en un móvil de pie tiene
+  // 7,4 u de ancho y 16 de alto. La timeline mueve un escalar 0..1 y `aplicar()` lo convierte en
+  // desplazamiento mirando la cámara de verdad: a un lado si hay sitio, arriba si no lo hay.
+  // La ESCALA sí se queda aquí: no depende del encuadre.
   tl.add(raiz, { rotateY: [H.rotY[1], yGal], duration: dG, ease: 'linear' }, 'GALERIA')
-    .add(raiz, { x: [0, G.apartar], scale: [H.escala[1], G.escala], duration: dur('GALERIA', 0, G.entra), ease: 'inOut(2)' }, 'GALERIA')
-    .add(estado, { luz: [H.luz[1], G.luz], duration: dur('GALERIA', 0, G.entra), ease: 'linear' }, 'GALERIA')
-    .add(raiz, { x: [G.apartar, 0], scale: [G.escala, H.escala[1]], duration: dur('GALERIA', 0, G.vuelve), ease: 'inOut(2)' }, en('GALERIA', 1 - G.vuelve))
+    .add(estado, { aparta: [0, 1], duration: dur('GALERIA', 0, G.entra), ease: 'inOut(2)' }, en('GALERIA', G.espera))
+    .add(raiz, { scale: [H.escala[1], G.escala], duration: dur('GALERIA', 0, G.entra), ease: 'inOut(2)' }, en('GALERIA', G.espera))
+    .add(estado, { luz: [H.luz[1], G.luz], duration: dur('GALERIA', 0, G.entra), ease: 'linear' }, en('GALERIA', G.espera))
+    .add(estado, { aparta: [1, 0], duration: dur('GALERIA', 0, G.vuelve), ease: 'inOut(2)' }, en('GALERIA', 1 - G.vuelve))
+    .add(raiz, { scale: [G.escala, H.escala[1]], duration: dur('GALERIA', 0, G.vuelve), ease: 'inOut(2)' }, en('GALERIA', 1 - G.vuelve))
     .add(estado, { luz: [G.luz, H.luz[1]], duration: dur('GALERIA', 0, G.vuelve), ease: 'linear' }, en('GALERIA', 1 - G.vuelve));
   // Ocho latidos del inyector, uno por demo, alineados con el contador "n / 8" del rótulo.
   // Cada latido son DOS tweens seguidos y no dos fotogramas clave dentro de uno: medido, con
@@ -219,7 +243,9 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   });
   // y la corona florece: cada tubo se separa de la campana hacia fuera, desde el centro
   tl.add(rig.tubos, {
-    z: [0, K.tuboFuera], duration: K.dur, ease: 'outQuint', delay: stagger(K.pasoTubo, { from: 'center' }),
+    // mismo criterio angular que en la entrada (aquí abre por el frente, que es lo que se ve):
+    // con `stagger(..., { from: 'center' })` la corona florecía por un costado, igual que entraba.
+    z: [0, K.tuboFuera], duration: K.dur, ease: 'outQuint', delay: reparto(K.repartoTubo, 'frente'),
   }, en('COMO', K.separar[0], 8 * K.paso));
 
   // 3. rótulos y guías: un escalar por pieza. El DOM lo pinta rotulos.ts leyendo estos escalares.
@@ -259,9 +285,14 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       duration: dur('COMO', K.recomponer[0], 0.93), ease: 'inOut(3)',
     }, en('COMO', K.recomponer[0]));
   });
-  tl.add(rig.tubos, { z: [K.tuboFuera, 0], duration: dur('COMO', K.recomponer[0], 0.93), ease: 'inOut(3)', delay: stagger(4, { from: 'center' }) }, en('COMO', K.recomponer[0]))
-    .add(raiz, { rotateY: [yPar, yFin], rotateX: [K.rotX, 0], y: [K.bajar, 0], x: [K.desplazar, 0], duration: dur('COMO', K.recomponer[0], 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0]))
-    .add(cam, { zoom: [K.zoom, H.zoom[1]], duration: dur('COMO', K.recomponer[0], 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0]));
+  tl.add(rig.tubos, { z: [K.tuboFuera, 0], duration: dur('COMO', K.recomponer[0], 0.93), ease: 'inOut(3)', delay: reparto(K.repartoTubo * 0.6, 'detras') }, en('COMO', K.recomponer[0]))
+    // LA CÁMARA VUELVE DESPUÉS QUE LAS PIEZAS, no a la vez. Arrancando las dos juntas, el encuadre
+    // ya se había cerrado (zoom 0,58 -> 1) cuando el anillo de bancada todavía estaba en su sitio
+    // del despiece, a y = 3,6 por encima del resto: el anillo salía CORTADO por el borde de arriba
+    // (captura esc-18). Con 0,06 de retraso las piezas van por delante del encuadre y no hay un
+    // solo fotograma con nada tocando el borde.
+    .add(raiz, { rotateY: [yPar, yFin], rotateX: [K.rotX, 0], y: [K.bajar, 0], x: [K.desplazar, 0], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06))
+    .add(cam, { zoom: [K.zoom, H.zoom[1]], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06));
 
   // ============================================================ CIERRE: encendido y salida
   const Z = C.cierre;
@@ -323,6 +354,31 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
 
     // 3. La turbobomba coge vueltas. Ángulo = f(tiempo), no un contador que se incrementa.
     rig.turbina.rotation.y = estado.rpm * tiempo * PM.coreo.cierre.rpm;
+
+    // 3b. EL DESVÍO DE LA GALERÍA. Se escribe en absoluto sobre un grupo que ningún tween toca, y
+    //     se calcula CADA FOTOGRAMA porque depende del encuadre: la cámara ortográfica fija el
+    //     alto y el ancho lo pone el aspecto del lienzo, así que el sitio disponible cambia con la
+    //     ventana y hasta al girar el teléfono. Reglas:
+    //       · en un cuadro apaisado el hueco se hace AL LADO (el objeto se va a la izquierda);
+    //       · en un cuadro de pie no hay sitio a los lados y no lo habrá nunca, así que el objeto
+    //         SUBE y el hueco queda abajo, donde ya viven el rótulo de capítulo y la sub-nav;
+    //       · y en los dos casos el desplazamiento se recorta con la holgura de verdad, para que
+    //         la máquina no se salga del cuadro pase lo que pase.
+    const A = estado.aparta;
+    if (A > 0.0005) {
+      const anchoVis = (cam.right - cam.left) / cam.zoom;
+      const altoVis = (cam.top - cam.bottom) / cam.zoom;
+      const g = PM.coreo.galeria;
+      const semiX = PM.motor.medioAncho * g.escala + g.margenApartar;
+      const semiY = PM.motor.medioAlto * g.escala + g.margenApartar;
+      if (altoVis > anchoVis * 1.15) {
+        rig.desvio.position.set(0, Math.min(g.apartar, Math.max(0, altoVis / 2 - semiY)) * A, 0);
+      } else {
+        rig.desvio.position.set(-Math.min(g.apartar, Math.max(0, anchoVis / 2 - semiX)) * A, 0, 0);
+      }
+    } else {
+      rig.desvio.position.set(0, 0, 0);
+    }
 
     // 4. La marca. Se lleva al espacio de la cámara: se toma el centro del conjunto en MUNDO, se
     //    adelanta hacia la cámara y se trae al espacio del padre de la placa. Definida en el
@@ -394,8 +450,15 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       // La CHAPA de soporte se desvanece con `logo`: en el motor da al monograma el sitio que
       // necesita para no leerse como una pieza suelta, pero al venir al frente crece con él y se
       // convertiría en un rectángulo gris tapando el motor entero.
+      // La chapa se va DE GOLPE, no linealmente. Con `1 - L` seguía al 80 % cuando la placa ya
+      // se había escalado 3,5x: en pantalla, una losa gris opaca del tamaño de la cámara de
+      // combustión tapando el motor entero (captura esc-16b), y a mitad de gesto una losa
+      // translúcida con el canto recto a la vista (esc-16c). El área crece con el CUADRADO de la
+      // escala, así que cualquier desvanecido proporcional al recorrido llega tarde. La chapa
+      // cumple su función —dar sitio al monograma cuando está atornillado al motor— y desaparece
+      // en cuanto el monograma se despega: a L = 0,12 ya no está.
       mat.opacity = chapaMarca.has(mat)
-        ? base * (1 - L) * fuera
+        ? base * Math.max(0, 1 - L * 8) * fuera
         : materialesMarca.has(mat)
           ? base * fuera
           : base * (1 - PM.coreo.como.borrado * estado.apagado) * fuera;
@@ -415,6 +478,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     rig.caliente.color.copy(colorFrio);
     rig.sacudida.position.set(0, 0, 0);
     rig.sacudida.rotation.set(0, 0, 0);
+    rig.desvio.position.set(0, 0, 0);
   }
 
   const objetivos: object[] = [
