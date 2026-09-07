@@ -92,6 +92,56 @@
       <section id="cierre" data-label="CIERRE" data-chapter="cierre"></section>
     </div>
 
+    <!-- LA GALERÍA. Cinco proyectos con demo viva. Las secciones de #capitulos son espaciadores:
+         lo que se ve vive aquí, en una capa fija, y el reloj del maestro decide cuál está delante.
+         Es contenido de verdad, no decoración, así que NO lleva aria-hidden. -->
+    <div id="galeria-tarjetas" class="capa">
+      <article class="tarjeta" data-slot="0">
+        <h2>SysRRHH</h2>
+        <p class="que">Sistema de recursos humanos completo: reclutamiento, contratos, asistencia, ausencias y portal de empleo.</p>
+        <p class="pila">NestJS · Prisma · PostgreSQL · React</p>
+        <p class="detalle">Las ausencias se cuadran con transacciones en nivel <em>serializable</em>, y un índice parcial garantiza un solo contrato vigente por empleado. 571 pruebas en seis segundos y medio.</p>
+        <p class="acceso"><a href="https://sysrrhh-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">Abrir la demo</a> · <code>admin@demo.local</code> / <code>Demo1234!</code></p>
+        <p class="aviso">Demo pública y editable: lo que hagas ahí lo ve todo el mundo.</p>
+      </article>
+
+      <article class="tarjeta" data-slot="1">
+        <h2>KUIDY-CORE</h2>
+        <p class="que">Plataforma sin código: defines proyectos, módulos y campos, y un motor genérico dibuja los formularios y valida los registros.</p>
+        <p class="pila">Hono · Drizzle · PostgreSQL con JSONB · React</p>
+        <p class="detalle">El validador se construye en tiempo de ejecución a partir de los metadatos y es el mismo en el navegador y en el servidor. Los registros viven en una sola tabla JSONB con índice GIN.</p>
+        <p class="acceso"><a href="https://kuidy-core-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">Abrir la demo</a> · <code>owner@kuidy.demo</code> / <code>Demo1234!</code></p>
+        <p class="aviso">Entra como propietario y crea un campo nuevo: el formulario se adapta solo.</p>
+      </article>
+
+      <article class="tarjeta" data-slot="2">
+        <h2>TechDocAPI</h2>
+        <p class="que">API REST para la documentación técnica de los sistemas instalados a bordo de embarcaciones.</p>
+        <p class="pila">Java 21 · Spring Boot · JPA · PostgreSQL</p>
+        <p class="detalle">Ocho entidades relacionadas y 47 rutas documentadas, con respuesta uniforme y paginada y filtros por estado, tipo, fechas y etiquetas. Se enseña sola desde Swagger.</p>
+        <p class="acceso"><a href="https://techdoc-api-164532276262.us-central1.run.app/api/swagger-ui.html" target="_blank" rel="noopener">Abrir Swagger</a> · sin contraseña</p>
+        <p class="aviso">Datos ficticios. La API no pide autenticación: cualquiera puede crear o borrar.</p>
+      </article>
+
+      <article class="tarjeta" data-slot="3">
+        <h2>API financiera reactiva</h2>
+        <p class="que">Tres microservicios reactivos: uno descifra el código del cliente, llama a los otros dos en paralelo y compone la respuesta.</p>
+        <p class="pila">Java 21 · WebFlux · R2DBC · Maven multi-módulo</p>
+        <p class="detalle">El identificador de correlación viaja por el contexto de Reactor y se puede comprobar en vivo: la cabecera coincide con el cuerpo de la respuesta. 99 pruebas.</p>
+        <p class="acceso"><a href="https://financial-api-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">Abrir la demo</a> · sin contraseña</p>
+        <p class="aviso">Era un reto de entrevista. El cifrado del código es determinista a propósito.</p>
+      </article>
+
+      <article class="tarjeta" data-slot="4">
+        <h2>Kip-Up Comandas</h2>
+        <p class="que">De la mesa a la cocina y a la caja, sincronizado en tiempo real: plano de mesas, pantalla de cocina e impresión de tickets.</p>
+        <p class="pila">Next.js · Prisma · Socket.IO · ESC/POS</p>
+        <p class="detalle">La cuenta se divide por personas o por productos y el descuento de stock es idempotente dentro de una transacción. La imagen se publica por rama y el servidor se actualiza solo.</p>
+        <p class="acceso"><a href="https://comandas-dev.kipups.com" target="_blank" rel="noopener">Abrir el entorno de pruebas</a></p>
+        <p class="aviso">Producto de Kip-Up, no personal. El enlace es el de pruebas, no el de producción.</p>
+      </article>
+    </div>
+
     <div id="rotulo" class="capa" aria-live="polite">
       <span id="capitulo-nombre"></span>
       <span id="capitulo-progreso"></span>

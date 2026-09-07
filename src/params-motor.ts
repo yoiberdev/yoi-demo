@@ -132,7 +132,9 @@ export const PM = {
       //     placas se apaga cuando entra el motor (`html.motor-on #stage { opacity: 0 }`), o sea
       //     que el hueco no lo ocupa nadie.
       // 1,7 es un descentrado de composición —"me aparto mientras hablan otros"—, no un abandono.
-      apartar: 1.4,
+      // 2,6 y no 1,4: se bajó cuando el hueco no lo ocupaba nadie, y ahora vive ahí la tarjeta
+      // del proyecto. El desplazamiento real lo sigue recortando la holgura del encuadre.
+      apartar: 2.6,
       margenApartar: 0.35,  // aire que se le deja al objeto contra el borde al desviarlo
       escala: 0.72,
       luz: 0.55,

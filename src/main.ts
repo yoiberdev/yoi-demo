@@ -9,6 +9,7 @@ import { montarTema } from './core/tema';
 import { montarSubnav } from './core/subnav';
 import { montarDebug } from './core/debug';
 import { montarHero } from './effects/hero';
+import { montarGaleria } from './effects/galeria';
 import { montarLogoIntro } from './effects/logo-intro';
 import { montarLogoSalida } from './effects/logo-salida';
 
@@ -29,6 +30,8 @@ function montar(self?: Scope): () => void {
   const proxy: Proxy = { currentTime: 0 };
   // El texto del hero (lema, nota y enlace) y el velo: Anime.js, dentro del maestro.
   const hero = montarHero(m, reduce);
+  // Antes de tl.init(): la galería añade sus tweens al maestro y init() los tiene que ver.
+  const galeria = montarGaleria(m, reduce);
   // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. Ver core/escena.ts.
   // El reloj que lee el motor 3D es el del PROPIO MAESTRO, no `proxy`. Son el mismo número casi
   // siempre, pero `proxy` solo es fiable justo después de un tic de scroll: al redimensionar,
@@ -101,7 +104,8 @@ function montar(self?: Scope): () => void {
   const pintarRotulo = (): void => {
     const { tramo, progreso } = tramoActual(m, proxy.currentTime);
     if (rotuloNombre) rotuloNombre.textContent = NOMBRES[tramo] ?? tramo;
-    if (rotuloProgreso) rotuloProgreso.textContent = tramo === 'GALERIA' ? `${Math.min(8, Math.floor(progreso * 8) + 1)} / 8` : '';
+    if (rotuloProgreso) rotuloProgreso.textContent = tramo === 'GALERIA' && galeria.total
+      ? `${Math.min(galeria.total, Math.floor(progreso * galeria.total) + 1)} / ${galeria.total}` : '';
   };
 
   const tema = montarTema(m);
@@ -112,6 +116,7 @@ function montar(self?: Scope): () => void {
     }
     colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
+    galeria.actualizar(proxy.currentTime);
     pintarRotulo();
     subnav.actualizar(scroller.progreso());
   });
@@ -158,6 +163,7 @@ function montar(self?: Scope): () => void {
     introTemporal?.revert();
     quitarDebug?.();
     escena.revertir();
+    galeria.revertir();
     tema.revertir();
     subnav.revertir();
     scroller.revertir();

@@ -105,6 +105,38 @@ html.motor-on #stage { opacity: 0; }
 .galeria-puntos { position: absolute; left: 50%; bottom: -2.5rem; transform: translateX(-50%); display: flex; gap: 0.6rem; }
 .galeria-punto { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--acento); display: block; }
 
+/* LA GALERÍA. El motor se aparta (a la izquierda en apaisado, arriba en vertical) y las tarjetas
+   ocupan ese hueco. Solo una está delante a la vez: la opacidad la escribe el reloj del maestro. */
+#galeria-tarjetas { pointer-events: none; }
+.tarjeta {
+  position: absolute;
+  right: 3vw;
+  top: 50%;
+  width: min(26rem, 34vw);
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+}
+.tarjeta.viva { pointer-events: auto; }
+.tarjeta h2 { margin: 0 0 0.75rem; font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 600; letter-spacing: -0.02em; }
+.tarjeta .que { margin: 0 0 1rem; font-size: 1.05rem; line-height: 1.45; color: var(--fg); }
+.tarjeta .pila { margin: 0 0 1rem; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acento); }
+.tarjeta .detalle { margin: 0 0 1.25rem; font-size: 0.92rem; line-height: 1.5; color: var(--muted); }
+.tarjeta .acceso { margin: 0 0 0.5rem; font-size: 0.92rem; }
+.tarjeta .acceso a { color: var(--fg); border-bottom: 1px solid var(--acento); text-decoration: none; }
+.tarjeta .acceso a:hover { border-bottom-width: 2px; }
+.tarjeta .acceso code { font-family: ui-monospace, monospace; font-size: 0.85em; color: var(--muted); }
+.tarjeta .aviso { margin: 0; font-size: 0.8rem; line-height: 1.4; color: var(--muted-2); }
+
+/* En vertical no hay sitio a los lados y nunca lo habrá: el motor sube y la tarjeta va abajo. */
+@media (max-aspect-ratio: 1/1) {
+  .tarjeta {
+    right: auto; left: 6vw; width: 88vw;
+    top: auto; bottom: 8.5rem; transform: none;
+  }
+  .tarjeta .detalle { display: none; }   /* en móvil, lo esencial: qué es, con qué, y el enlace */
+}
+
 /* Rótulo de capítulo */
 #rotulo { inset: auto auto 1.25rem 1.25rem; display: flex; gap: 0.75rem; font-size: 0.85rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
 #capitulo-progreso { color: var(--fg); }
