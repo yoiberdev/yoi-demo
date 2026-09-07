@@ -44,6 +44,12 @@ export type MontarMotor = (ctx: ContextoMotor) => Escena;
 export interface OpcionesEscena {
   reduce: boolean;
   tiempo: () => number;
+  /** Se llama cuando el trozo 3D acaba de montarse, para que quien lleva el reloj de la página lo
+   *  vuelva a colocar. Colgar los ~130 hijos del motor del maestro le pone el reloj a 0 (ver el
+   *  comienzo de effects/motor3d.ts); el motor repone el suyo, pero el maestro también manda sobre
+   *  el hero y sobre la salida del logo, que van en OTRA librería. Esto es el tirante: main.ts hace
+   *  un `colocar()` completo y las dos capas vuelven al fotograma que toca. */
+  alMontarMotor?: () => void;
 }
 
 export type EstadoRelevo = 'css' | 'cargando' | 'webgl' | 'fallido';
@@ -52,6 +58,9 @@ export interface Relevo {
   capacidad: Capacidad;
   estado(): EstadoRelevo;
   info(): Record<string, number | string | boolean> | null;
+  /** Pide el trozo 3D AHORA (si procede). Lo llama main.ts desde el `alTerminar` de la intro del
+   *  logo: el eslabón entre las dos piezas. Idempotente y sin efecto si el 3D está descartado. */
+  pedirMotor(): void;
   revertir(): void;
 }
 
@@ -69,6 +78,9 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
   let estado: EstadoRelevo = 'css';
   let muerto = false;
   let pedido = false;
+  /** false cuando el 3D está descartado de entrada (sin anfitrión, ?motor=css o máquina que no lo
+   *  aguanta): entonces nadie puede pedirlo, tampoco el enganche de la intro del logo. */
+  let enPie = false;
   let tresD: Escena | null = null;
 
   // Temporizadores, todos con su identificador guardado para poder cancelarlos.
@@ -99,6 +111,29 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
     if (window.scrollY > 1) pedir();
   }
 
+  /** ¿Está el lienzo descubierto? Lo mueve `mirar()` según el reloj del maestro. */
+  let telon = false;
+
+  function subirTelon(): void {
+    if (telon) return;
+    telon = true;
+    html.classList.add('motor-on');   // el cruce lo hace el CSS (transition de opacidad)
+    window.clearTimeout(idTapar);
+    // El escenario CSS se saca del árbol solo al final del cruce, y solo si el telón sigue arriba:
+    // en esos 420 ms el visitante puede haber vuelto para atrás.
+    idTapar = window.setTimeout(() => {
+      if (!muerto && estado === 'webgl' && telon && stage) stage.hidden = true;
+    }, P.motor.relevo);
+  }
+
+  function bajarTelon(): void {
+    if (!telon) return;
+    telon = false;
+    window.clearTimeout(idTapar);
+    if (stage) stage.hidden = false;   // primero se destapa, y luego se funde: nunca hay hueco negro
+    html.classList.remove('motor-on');
+  }
+
   function pedir(): void {
     if (pedido || muerto) return;
     pedido = true;
@@ -120,25 +155,35 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
       });
       estado = 'webgl';
       html.classList.remove('motor-cargando');
+      op.alMontarMotor?.();
       // NADA DE CRUZAR POR RELOJ. El cruce (que es lo que deja el escenario CSS a opacidad 0) no
       // empieza hasta que el motor ha DIBUJADO un fotograma. Si el contexto se crea pero el bucle
       // no entrega —un driver que no compone, unos sombreadores que se atascan— no salta ninguna
       // excepción, así que sin esta comprobación quedaría el CSS tapado y el lienzo vacío: la
       // página en blanco. Y si en `sinFotogramas` ms no ha salido ninguno, se vuelve al CSS.
       const desde = performance.now();
+      let dibuja = false;
       const mirar = (): void => {
         if (muerto || estado !== 'webgl') return;
-        const f = Number(tresD?.info?.().fotogramas ?? 0);
-        if (f > 0) {
-          html.classList.add('motor-on');   // el cruce lo hace el CSS (transition de opacidad)
-          idTapar = window.setTimeout(() => {
-            if (!muerto && estado === 'webgl' && stage) stage.hidden = true;
-          }, P.motor.relevo);
-          return;
+        if (!dibuja) {
+          const f = Number(tresD?.info?.().fotogramas ?? 0);
+          if (f > 0) dibuja = true;
+          else if (performance.now() - desde > P.motor.sinFotogramas) {
+            rendirse('sin fotogramas');
+            return;
+          }
         }
-        if (performance.now() - desde > P.motor.sinFotogramas) {
-          rendirse('sin fotogramas');
-          return;
+        // EL TELÓN VA CON EL RELOJ, Y EN LOS DOS SENTIDOS. Dibujar un fotograma es condición
+        // necesaria, no suficiente: el trozo 3D llega mientras el logo flota y el visitante todavía
+        // no ha bajado, y en INTRO el motor está en su estado de partida, o sea con las piezas
+        // repartidas fuera de sitio. Enseñarlo ahí es poner chatarra detrás del logo. Se descubre
+        // cuando el maestro entra en HERO_OUT, que es cuando el motor empieza a ensamblarse, y se
+        // vuelve a tapar al volver a INTRO: quien arrastra el scroll hacia atrás desde la galería
+        // tiene que encontrarse la misma intro limpia que la primera vez.
+        if (dibuja) {
+          const t = op.tiempo();
+          if (t > m.L.HERO_OUT + P.motor.telonSube) subirTelon();
+          else if (t < m.L.HERO_OUT + P.motor.telonBaja) bajarTelon();
         }
         idVigila = requestAnimationFrame(mirar);
       };
@@ -156,10 +201,8 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
   function rendirse(motivo: string): void {
     if (estado !== 'webgl' || muerto) return;
     estado = 'fallido';
-    window.clearTimeout(idTapar);
     cancelAnimationFrame(idVigila);
-    if (stage) stage.hidden = false;
-    html.classList.remove('motor-on');
+    bajarTelon();
     // La instancia pendiente se guarda en el cierre y no solo en la local del temporizador: si el
     // scope se revierte dentro de esos 420 ms, el clearTimeout mataba al único que la conocía y el
     // renderizador, el lienzo y el bucle se quedaban puestos para siempre.
@@ -169,11 +212,23 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
     if (import.meta.env.DEV) console.warn('[motor] vuelta al escenario CSS:', motivo);
   }
 
+  let idEnganche = 0;
+
   const salida: Relevo = {
     capacidad,
     estado: () => estado,
     info: () => tresD?.info?.() ?? null,
+    // EL ENGANCHE CON LA INTRO DEL LOGO. Un fotograma de margen: `alTerminar` se dispara desde el
+    // `onComplete` de la entrada (o, con movimiento reducido, en mitad del propio montaje), y no
+    // conviene arrancar ahí mismo el análisis de 610 kB de JS. Con `enPie === false` no hace nada:
+    // la máquina no lleva el 3D y no hay trozo que pedir.
+    pedirMotor() {
+      if (muerto || pedido || !enPie) return;
+      cancelAnimationFrame(idEnganche);
+      idEnganche = requestAnimationFrame(() => pedir());
+    },
     revertir() {
+      cancelAnimationFrame(idEnganche);
       if (muerto) return;
       muerto = true;
       desarmarDisparadores();
@@ -184,17 +239,23 @@ export function montarEscena(m: Maestro, op: OpcionesEscena): Relevo {
       tresD = null;
       soltando = null;
       css.revertir();
-      html.classList.remove('motor-on', 'motor-cargando');
-      if (stage) stage.hidden = false;
+      bajarTelon();
+      html.classList.remove('motor-cargando');
     },
   };
 
   if (!anfitrion || forzado === 'css' || (!capacidad.usar3d && forzado !== '3d')) return salida;
+  enPie = true;
 
-  // 2) Cuándo se pide el trozo. Nunca durante la primera pintura: se esperan dos fotogramas (así la
-  //    primera pintura ya ocurrió) y luego a que la intro termine de escribir el título. Después, al
-  //    primer hueco de ocio; si el navegador nunca está ocioso, por tiempo. Si el visitante ya está
-  //    bajando, se pide en el acto: el 3D hace falta a partir de HERO_OUT.
+  // 2) Cuándo se pide el trozo. QUIEN LO PIDE EN LA VIDA REAL ES EL LOGO: main.ts engancha
+  //    `escena.pedirMotor()` al `alTerminar` de la intro, así que el trozo sale en cuanto las tres
+  //    formas se ensamblan y mientras el logo flota esperando al visitante. Nunca antes: durante la
+  //    entrada no se compite por el ancho de banda ni por el hilo principal.
+  //    Lo de abajo es la RED por si ese aviso no llega (marcado sin el SVG, pestaña en segundo plano
+  //    durante la entrada): dos fotogramas para dejar pasar la primera pintura, luego el suelo de
+  //    P.motor.esperaMinima —que ya cae DESPUÉS de la entrada del logo—, luego el primer hueco de
+  //    ocio y, si el navegador nunca está ocioso, el tope duro. Si el visitante ya está bajando, se
+  //    pide en el acto: el 3D hace falta a partir de HERO_OUT.
   window.addEventListener('scroll', alBajar, { passive: true });
   if (window.scrollY > 1) {
     pedir(); // recarga a mitad de página: el 3D ya se necesita

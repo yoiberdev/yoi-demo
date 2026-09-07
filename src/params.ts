@@ -1,17 +1,39 @@
 // Única fuente de números del demo. Ajustar "más rápido / más lento" es cambiar aquí, nunca lógica.
 // origen: 'propio' = decisión de diseño; 'doc' = valor canónico de la documentación de Anime.js.
+
+// LA ENTRADA DEL LOGO manda sobre el reloj, no al revés. Estos dos números NO se eligen aquí: son
+// los del original de yoiber.com, leídos de AnimatedLogo.tsx y copiados en effects/logo-intro.ts
+// (que los lleva escritos a mano, porque es un port literal). Se repiten aquí porque hay dos cosas
+// que tienen que cuadrar con ellos: cuánto dura el tramo INTRO del maestro y cuándo se pide el
+// trozo 3D. Si alguien toca la coreografía, esto se mueve con ella.
+const LOGO = {
+  arranque: 300,   // ms de espera desde el montaje hasta que arranca la entrada
+  entrada: 4800,   // ms de coreografía: la barra aterriza en 4,5 s y el ajuste del SVG cierra en 4,8
+};
+
 export const P = {
   scroll: {
     sync: 0.9, // suavizado del scroll (más cerca de 0, más tarda en alcanzar la posición)
-    introDuration: 4000, // la intro corre por tiempo; el resto, por scroll
+    // La intro corre por tiempo y el resto por scroll. Dura EXACTAMENTE lo que la entrada del logo:
+    // el tramo INTRO es "el logo entrando", así que se acaban a la vez. Antes eran 4 000 ms con un
+    // título de texto partido que duraba eso; ahora manda la coreografía de yoiber.com.
+    introDuration: LOGO.arranque + LOGO.entrada, // 5100
     alturas: { HERO_OUT: 2, GALERIA: 8, COMO: 5, CIERRE: 2 } as Record<string, number>, // en alturas de viewport; 1 altura = 1000 unidades del maestro
     origen: 'propio',
   },
+  // El hero: el logo (GSAP, effects/logo-intro.ts + logo-salida.ts) y el texto de debajo
+  // (Anime.js, effects/hero.ts). Ver effects/hero.ts para por qué el texto entra tan tarde.
   intro: {
     on: 300,
-    chars: { x: ['.35em', 0] as [string, number], duration: 1000, ease: 'outQuint', stagger: 25, staggerEase: 'outIn(2)' },
-    punto: { delay: 550, stiffness: 120, damping: 6 },
-    lema: { delay: 500, stagger: 150 },
+    logo: LOGO,
+    // El texto entra cuando el logo YA está montado. La medida está tomada del propio port: con
+    // `power4.out` las formas llegan a escala 1,027 a los 2,5 s y a 1,000 a los 3,5 s, así que a
+    // los 3,2 s de reloj (2,9 s después de INTRO_ON) el logo está visualmente quieto.
+    texto: { delay: 2900, duration: 800, stagger: 150, y: 12 },
+    // Cuánto del tramo HERO_OUT ocupa cada retirada, en tanto por uno. El texto se va un poco más
+    // tarde que el logo: el logo despeja el centro y el texto se lo lleva mientras el motor sube.
+    salidaTexto: 0.6,
+    salidaLogo: 0.55,
     origen: 'propio',
   },
   panel: {
@@ -24,14 +46,33 @@ export const P = {
   tema: { margen: 250, origen: 'propio' }, // los colores viven en base.css (:root y html.is-light); la transición, en CSS
   // El motor 3D: cuándo se pide, con qué calidad y con cuánto lienzo. Ver src/core/capacidad.ts.
   motor: {
-    // Después de la intro (P.scroll.introDuration = 4 000). Analizar 610 kB de JS, construir ~40
-    // geometrías y renderizar el maestro entero dos veces (lo que hace tl.init()) es una tarea
-    // larga: encima de la animación del título, en un móvil, se ve. El motor no hace falta hasta
-    // HERO_OUT, que es cuando se monta.
-    esperaMinima: 4200,   // ms: no se pide el trozo antes de esto
+    // ESTOS TRES SON LA RED, NO EL DISPARADOR. Quien pide el trozo 3D en la vida real es el propio
+    // logo: `alTerminar` de effects/logo-intro.ts llama a `escena.pedirMotor()` en cuanto la entrada
+    // se ensambla (ver main.ts). Los temporizadores solo cubren el caso de que ese aviso no llegue
+    // nunca —el SVG no está en el marcado, o el navegador tumba la pestaña a mitad de la entrada—.
+    // Por eso el suelo se ha subido: analizar 610 kB de JS, construir ~40 geometrías y renderizar
+    // el maestro entero dos veces (lo que hace tl.init()) es una tarea larga, y ahora la entrada
+    // del logo ocupa hasta los 5,1 s (LOGO.arranque + LOGO.entrada). El motor no hace falta hasta
+    // HERO_OUT; si el visitante baja antes, `alBajar` lo pide en el acto.
+    esperaMinima: LOGO.arranque + LOGO.entrada + 400,   // 5500 ms: no se pide el trozo antes de esto
     esperaOciosa: 700,    // ms de margen que se le da a requestIdleCallback a partir de esperaMinima
-    esperaMaxima: 6000,   // ms: tope duro; se pide aunque el navegador no esté ocioso
+    esperaMaxima: 7500,   // ms: tope duro; se pide aunque el navegador no esté ocioso
     relevo: 420,          // ms del cruce entre el escenario CSS y el lienzo (también en base.css)
+    // EL TELÓN del lienzo, en unidades del maestro por encima de HERO_OUT. El reloj se PARA justo
+    // en HERO_OUT cuando la intro por tiempo termina (INTRO_END == HERO_OUT), así que hace falta un
+    // margen para distinguir "la intro ha acabado" de "el visitante ha empezado a bajar".
+    // Son DOS umbrales y no uno porque el telón sube y baja: con uno solo, arrastrar el scroll justo
+    // encima de la frontera encadenaría cruces de 420 ms. 60 y 20 de 2000 son el 3 % y el 1 % del
+    // tramo; con una ventana de 900 px, una banda de unos 18 px.
+    // 600 y 400, no 60 y 20. Con 60 (el 3 % del tramo) el telón subía a 40 px de scroll: el motor
+    // aparecía despiezado en cuarenta tubos detrás de un logo que todavía no se había movido. El
+    // logo tarda el 55 % del tramo en irse, así que a 600 (30 %) ya está claramente saliendo y el
+    // motor se descubre a medio ensamblar, que se lee mucho mejor que en su estado de partida.
+    telonSube: 600,
+    telonBaja: 400,
+    // Espera antes de pedir el trozo 3D tras ensamblarse el logo, en ms. La flotación arranca a los
+    // 500 ms; con 1400 lleva casi un segundo a la vista cuando llega la parada del analizador.
+    esperaTrasIntro: 1400,
     vetoNucleos: 2,       // hardwareConcurrency <= esto: ni se intenta
     vetoMemoria: 2,       // deviceMemory (GB) <= esto: ni se intenta
     minNucleos: 4,        // por debajo: calidad baja

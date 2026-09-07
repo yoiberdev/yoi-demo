@@ -35,38 +35,32 @@ html.js:not(.is-ready) .capa { visibility: hidden; }
 
 /* Hero */
 #hero { display: grid; place-items: center; pointer-events: none; }
-#hero .intro {
-  text-align: center; padding: 2rem 2.5rem 3rem; pointer-events: auto;
-  /* VELO. El motor se ensambla POR DETRÁS del título mientras el hero se va, y el gris del objeto
-     y el gris de la letra son el mismo: en la captura esc-02 el titular "yoiber." y las dos líneas
-     de abajo caían sobre la cámara de combustión y no se leían. Un velo del color del fondo, sin
-     borde, devuelve el contraste sin pintar una caja encima del objeto. Se va con el hero, porque
-     es hijo suyo. */
+#hero .intro { position: relative; text-align: center; padding: 2rem 2.5rem 3rem; pointer-events: auto; }
+/* VELO. El motor se ensambla POR DETRÁS del hero mientras este se va, y el gris del objeto y el
+   gris de la letra son el mismo: en la captura esc-02 el titular y las dos líneas de abajo caían
+   sobre la cámara de combustión y no se leían. Un velo del color del fondo, sin borde, devuelve el
+   contraste sin pintar una caja encima del objeto.
+   Es un nodo y no el fondo de `.intro` porque en el relevo el velo se va CON EL TEXTO (Anime.js,
+   dentro del maestro) y el logo se va por su cuenta (GSAP): si el velo siguiera siendo el fondo del
+   contenedor, fundirlo se llevaría también el logo por delante. */
+#velo {
+  position: absolute; inset: -2rem -1rem; z-index: 0; pointer-events: none;
   background: radial-gradient(ellipse 78% 62% at 50% 42%,
     color-mix(in srgb, var(--bg) 92%, transparent) 0%,
     color-mix(in srgb, var(--bg) 74%, transparent) 52%,
     transparent 78%);
 }
-h1 {
-  margin: 0;
-  font-size: clamp(3rem, 12vw, 9rem);
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  display: inline-flex;
-  align-items: baseline;
+/* El logo animado (effects/logo-intro.ts). Sus formas salen a 15-20 aumentos y muy lejos del
+   centro: nada en su camino puede recortarlas, de ahí el overflow visible aquí y en el SVG. */
+#logo {
+  display: flex; align-items: center; justify-content: center;
+  overflow: visible; position: relative; z-index: 10; transform-origin: center;
 }
-#titulo .char { display: inline-block; will-change: transform, opacity; }
-#punto {
-  display: inline-block;
-  width: 0.22em;
-  height: 0.22em;
-  border-radius: 50%;
-  background: var(--acento);
-  margin-left: 0.08em;
-  transform-origin: center;
-}
-#lema { margin: 1.25rem 0 0; font-size: clamp(1rem, 2.2vw, 1.4rem); color: var(--muted); }
+/* Los tres <g> son la capa de la salida (effects/logo-salida.ts); en reposo no transforman nada, y
+   el origen de sus giros lo pone GSAP en cada gesto (aquí no, para no tener dos fuentes). */
+
+#lema, #nota, #bajar { position: relative; z-index: 1; }
+#lema { margin: 1.75rem 0 0; font-size: clamp(1rem, 2.2vw, 1.4rem); color: var(--muted); }
 #nota { margin: 2.5rem 0 0; font-size: 0.85rem; color: var(--muted-2); }
 #bajar { display: inline-block; margin-top: 1.5rem; font-size: 0.85rem; color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--line); }
 #bajar:focus-visible { outline: 2px solid var(--acento); outline-offset: 4px; }
@@ -143,7 +137,7 @@ html.motor-on #stage { opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   body { scroll-behavior: auto; }
-  #titulo .char, #panel { will-change: auto; }
+  #panel { will-change: auto; }
   #subnav, html, body, .placa, #debug { transition: none; }
 }
 

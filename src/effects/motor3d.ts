@@ -21,6 +21,15 @@ const esContorno = (nombre: string): boolean => nombre.startsWith('aristas-') ||
 export function montarMotor(ctx: ContextoMotor): Escena {
   const { m, anfitrion, tiempo, calidad, tactil, rendirse } = ctx;
 
+  // EL RELOJ, LO PRIMERO DE TODO. `tiempo()` es `() => m.tl.currentTime` (ver main.ts), y COLGAR
+  // HIJOS DEL MAESTRO YA LO PONE A 0: no hace falta ni llegar al init(), los `.add()` de
+  // montarCoreografia bastan. Leerlo más abajo devolvía 0, así que el `seek()` de después de init()
+  // reponía el reloj... a 0, y ahí se quedaba hasta el siguiente tic de scroll.
+  // No se veía mientras el motor llegaba con la página ya en movimiento. Se ve ahora, que el motor
+  // lo pide la intro del logo al ensamblarse y la página está QUIETA: el hero volvía a su estado de
+  // partida (texto y velo a opacidad 0) y el motor pintaba sus piezas sin montar detrás del logo.
+  const tAlMontar = tiempo();
+
   // ---------------------------------------------------------------------------------------
   // 1. LIENZO Y RENDERIZADOR
   // ---------------------------------------------------------------------------------------
@@ -107,8 +116,10 @@ export function montarMotor(ctx: ContextoMotor): Escena {
     //   (a) todos los valores van como [desde, hasta] explícitos (ver coreografia.ts);
     //   (b) hay que volver a llamar a tl.init() para que los hijos nuevos pinten su estado de
     //       partida, y justo después reponer el reloj con seek(), porque init() lo deja en 0.
+    //   (c) el reloj que se repone es `tAlMontar`, apuntado al entrar en esta función y no aquí:
+    //       ver el comentario de arriba del todo.
     m.tl.init();
-    m.tl.seek(tiempo());
+    m.tl.seek(tAlMontar);
 
     // -------------------------------------------------------------------------------------
     // 3. TAMAÑO

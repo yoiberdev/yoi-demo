@@ -8,7 +8,9 @@ import { montarEscena } from './core/escena';
 import { montarTema } from './core/tema';
 import { montarSubnav } from './core/subnav';
 import { montarDebug } from './core/debug';
-import { montarIntro } from './effects/intro';
+import { montarHero } from './effects/hero';
+import { montarLogoIntro } from './effects/logo-intro';
+import { montarLogoSalida } from './effects/logo-salida';
 
 const NOMBRES: Record<string, string> = { INTRO: 'intro', HERO_OUT: 'intro', GALERIA: 'galería', COMO: 'cómo está hecho', CIERRE: 'cierre' };
 
@@ -25,17 +27,72 @@ function montar(self?: Scope): () => void {
   const reduce = self?.matches.reduceMotion === true;
   const m = crearMaestro();
   const proxy: Proxy = { currentTime: 0 };
-  const intro = montarIntro(m, reduce);
-  // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. El relevo pide
-  // el trozo diferido él solo; aquí no se espera a nada. Ver core/escena.ts.
+  // El texto del hero (lema, nota y enlace) y el velo: Anime.js, dentro del maestro.
+  const hero = montarHero(m, reduce);
+  // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. Ver core/escena.ts.
   // El reloj que lee el motor 3D es el del PROPIO MAESTRO, no `proxy`. Son el mismo número casi
   // siempre, pero `proxy` solo es fiable justo después de un tic de scroll: al redimensionar,
   // `scroller.refrescar()` reconstruye la línea de tiempo y el maestro se queda en su etiqueta
   // mientras `proxy` conserva el valor viejo. Con el escenario CSS eso no se notaba (nadie lee
   // `proxy` por fotograma); el motor lo lee 60 veces por segundo para el temblor, el parpadeo del
   // penacho y las vueltas de la turbina, y ahí se veía el salto.
-  const escena = montarEscena(m, { reduce, tiempo: () => m.tl.currentTime });
+  const escena = montarEscena(m, {
+    reduce,
+    tiempo: () => m.tl.currentTime,
+    // El motor llega con la página quieta (lo pide la intro del logo al ensamblarse): nadie va a
+    // mover el scroll detrás para recolocar el reloj, así que se recoloca aquí. `colocar` es la
+    // función de más abajo: mueve el maestro Y la timeline de GSAP del logo, que es justo lo que
+    // hace falta reponer.
+    alMontarMotor: () => colocar(proxy.currentTime),
+  });
+
+  // EL RELEVO, en tres eslabones (ver effects/logo-salida.ts para el porqué de cada uno):
+  //   1) la SALIDA del logo se escribe en el maestro como un escalar 0..1 en HERO_OUT, y es lo que
+  //      ata la timeline de GSAP al reloj del scroll;
+  //   2) `alEmpezar` avisa a la entrada de que el visitante ya baja, para que termine deprisa en vez
+  //      de cruzarse con la retirada;
+  //   3) `alTapar` congela la flotación cuando el logo ya no se ve.
+  // El logo se monta DESPUÉS (no toca el maestro), así que la salida lo alcanza por el cierre.
+  let logo: ReturnType<typeof montarLogoIntro> | null = null;
+  const salidaLogo = montarLogoSalida(m, {
+    reduce,
+    alEmpezar: () => logo?.acelerarEntrada(),
+    alTapar: (fuera) => logo?.congelar(fuera),
+  });
+
   m.tl.init();
+
+  // TODO EL MUNDO COLOCA EL RELOJ POR AQUÍ. `m.tl.seek()` mueve a los hijos del maestro (el hero, el
+  // escenario y, cuando llega, el motor); `salidaLogo.aplicar()` copia el escalar que acaba de
+  // moverse a la timeline de GSAP del logo. Van juntos SIEMPRE, y por eso están en la misma función:
+  // si alguien llamara al seek a secas, el logo se quedaría en el fotograma anterior.
+  const colocar = (t: number): void => {
+    m.tl.seek(t);
+    salidaLogo.aplicar();
+  };
+
+  // La intro del logo de yoiber.com: entrada y flotación con su propio reloj (GSAP), como el
+  // original. Solo la SALIDA está atada al maestro. `alTerminar` es el eslabón con el motor: en
+  // cuanto las tres formas se ensamblan se pide el trozo 3D, ni antes (competiría con la entrada)
+  // ni mucho después (tiene que estar montado para cuando el visitante baje).
+  // El trozo 3D pesa 617 kB y al analizarlo el hilo principal se para. Si se pide en cuanto las
+  // formas se ensamblan, esa parada cae justo encima del arranque de la flotación y el logo se
+  // queda congelado un par de segundos: medido, la flotación empezaba a moverse a los 7,9 s en vez
+  // de a los 5,5 s del original. Así que se espera a que la flotación lleve ya un rato a la vista.
+  // Y si el visitante baja antes, se pide en el acto: entonces sí lo necesita ya.
+  let esperaMotor = 0;
+  const pedirYa = (): void => {
+    window.clearTimeout(esperaMotor);
+    esperaMotor = 0;
+    window.removeEventListener('scroll', pedirYa);
+    escena.pedirMotor();          // idempotente: escena.ts lleva su propio pestillo
+  };
+  logo = montarLogoIntro(self, {
+    alTerminar: () => {
+      esperaMotor = window.setTimeout(pedirYa, P.motor.esperaTrasIntro);
+      window.addEventListener('scroll', pedirYa, { once: true, passive: true });
+    },
+  });
 
   const rotuloNombre = document.querySelector<HTMLElement>('#capitulo-nombre');
   const rotuloProgreso = document.querySelector<HTMLElement>('#capitulo-progreso');
@@ -53,31 +110,30 @@ function montar(self?: Scope): () => void {
       if (window.scrollY < 2) return; // el scroller aún no manda: la intro sigue por tiempo
       introTemporal.pause(); // el usuario hizo scroll durante la intro: el scroll toma el mando
     }
-    m.tl.seek(proxy.currentTime);
+    colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
     pintarRotulo();
     subnav.actualizar(scroller.progreso());
   });
   const subnav = montarSubnav(scroller);
-  const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy, escena) : null;
+  const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy, escena, salidaLogo) : null;
 
   if (reduce || window.scrollY > 1) {
     // Recarga a mitad de página o movimiento reducido: sin intro por tiempo.
     proxy.currentTime = m.L.INTRO_END;
-    m.tl.seek(m.L.INTRO_END);
+    colocar(m.L.INTRO_END);
     tema.actualizar(proxy.currentTime);
   } else {
+    // La intro corre por tiempo y dura lo que la entrada del logo (P.scroll.introDuration sale de
+    // los números del original). Sin onComplete: el bucle de flotación lo arranca el propio logo
+    // desde su `onComplete`, que es donde estaba en yoiber.com.
     introTemporal = animate(proxy, {
       currentTime: [m.L.INTRO, m.L.INTRO_END],
       duration: P.scroll.introDuration,
       ease: 'linear',
       onUpdate: () => {
-        m.tl.seek(proxy.currentTime);
+        colocar(proxy.currentTime);
         pintarRotulo();
-      },
-      onComplete: () => {
-        const pulso = intro.arrancarPulso();
-        if (pulso && self) (self.data.loops ??= new Set()).add(pulso);
       },
     });
   }
@@ -86,10 +142,12 @@ function montar(self?: Scope): () => void {
   let temporizador = 0;
   const alRedimensionar = (): void => {
     window.clearTimeout(temporizador);
+    window.clearTimeout(esperaMotor);
+    window.removeEventListener('scroll', pedirYa);
     temporizador = window.setTimeout(() => {
       ajustarAlturas();
       scroller.refrescar();
-      m.tl.seek(proxy.currentTime);   // refrescar() reconstruye y deja el maestro en 0: se repone
+      colocar(proxy.currentTime);   // refrescar() reconstruye y deja el maestro en 0: se repone
     }, 250);
   };
   window.addEventListener('resize', alRedimensionar);
@@ -103,7 +161,9 @@ function montar(self?: Scope): () => void {
     tema.revertir();
     subnav.revertir();
     scroller.revertir();
-    intro.revertir();
+    logo?.();            // el cleanup de la intro del logo: mata entrada, flotación y espera
+    salidaLogo.revertir();
+    hero.revertir();
     m.tl.revert();
   };
 }
