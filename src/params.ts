@@ -18,7 +18,7 @@ export const P = {
     // el tramo INTRO es "el logo entrando", así que se acaban a la vez. Antes eran 4 000 ms con un
     // título de texto partido que duraba eso; ahora manda la coreografía de yoiber.com.
     introDuration: LOGO.arranque + LOGO.entrada, // 5100
-    alturas: { HERO_OUT: 2, GALERIA: 5, COMO: 5, CIERRE: 2 } as Record<string, number>, // en alturas de viewport; 1 altura = 1000 unidades del maestro
+    alturas: { HERO_OUT: 2, GALERIA: 10, COMO: 5, CIERRE: 2 } as Record<string, number>, // en alturas de viewport; 1 altura = 1000 unidades del maestro
     origen: 'propio',
   },
   // El hero: el logo (GSAP, effects/logo-intro.ts + logo-salida.ts) y el texto de debajo

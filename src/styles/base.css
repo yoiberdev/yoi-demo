@@ -111,13 +111,29 @@ html.motor-on #stage { opacity: 0; }
 .tarjeta {
   position: absolute;
   right: 3vw;
-  top: 50%;
+  /* Centrado por caja, NO por transform: la animación de entrada también escribe transform y
+     pisaba el translateY(-50%). Se veía como tarjetas que se salían por abajo. */
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   width: min(26rem, 34vw);
-  transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
 }
 .tarjeta.viva { pointer-events: auto; }
+.tarjeta .captura {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 0 1rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  max-height: 34vh;
+  object-fit: cover;
+  object-position: top left;
+}
 .tarjeta h2 { margin: 0 0 0.75rem; font-size: clamp(1.5rem, 3vw, 2.25rem); font-weight: 600; letter-spacing: -0.02em; }
 .tarjeta .que { margin: 0 0 1rem; font-size: 1.05rem; line-height: 1.45; color: var(--fg); }
 .tarjeta .pila { margin: 0 0 1rem; font-size: 0.8rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--acento); }
@@ -128,11 +144,22 @@ html.motor-on #stage { opacity: 0; }
 .tarjeta .acceso code { font-family: ui-monospace, monospace; font-size: 0.85em; color: var(--muted); }
 .tarjeta .aviso { margin: 0; font-size: 0.8rem; line-height: 1.4; color: var(--muted-2); }
 
+/* Ventanas bajas (portátiles de 13 pulgadas, o el navegador con barras): el párrafo técnico es lo
+   primero que sobra. Qué es, con qué está hecho y el enlace tienen que caber siempre. */
+@media (min-aspect-ratio: 1/1) and (max-height: 700px) {
+  .tarjeta { width: min(24rem, 32vw); }
+  .tarjeta h2 { font-size: 1.6rem; margin-bottom: 0.5rem; }
+  .tarjeta .que { font-size: 0.95rem; margin-bottom: 0.6rem; }
+  .tarjeta .pila { margin-bottom: 0.6rem; }
+  .tarjeta .detalle { display: none; }
+  .tarjeta .captura { margin-bottom: 0.6rem; }
+}
+
 /* En vertical no hay sitio a los lados y nunca lo habrá: el motor sube y la tarjeta va abajo. */
 @media (max-aspect-ratio: 1/1) {
   .tarjeta {
     right: auto; left: 6vw; width: 88vw;
-    top: auto; bottom: 8.5rem; transform: none;
+    top: auto; bottom: 8.5rem; display: block;
   }
   .tarjeta .detalle { display: none; }   /* en móvil, lo esencial: qué es, con qué, y el enlace */
 }

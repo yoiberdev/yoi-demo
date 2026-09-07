@@ -28,7 +28,9 @@ export function montarGaleria(m: Maestro, reduce: boolean): Galeria {
   const dur = m.duracion('GALERIA') - margen;
   const paso = dur / tarjetas.length;
   // La tarjeta ocupa su tramo entero menos los cruces: entra, se queda quieta y se va.
-  const cruce = Math.min(420, paso * 0.22);
+  // Cruce corto respecto al tramo: la tarjeta entra, se queda MUCHO rato quieta y se va.
+  // Con un cruce largo el texto pasa media vida a media opacidad y no se puede leer.
+  const cruce = Math.min(500, paso * 0.14);
 
   tl.set(tarjetas, { opacity: 0, y: reduce ? 0 : 26 }, 0);
   tarjetas.forEach((el, i) => {
