@@ -66,12 +66,29 @@ export const PM = {
   // la coreografía entera es función del scroll y por eso se deshace perfecta al subir, pero también
   // por eso la página se queda helada en cuanto dejas de bajar. Esto es lo único que corre solo.
   // No hace falta que sea reversible porque no va a ninguna parte: son ciclos que solo laten.
-  // Frecuencias en radianes por milisegundo (0,0002 rad/ms ~ 8,7 s de periodo).
+  // Frecuencias en radianes por milisegundo (periodo en segundos = 2π / (Hz · 1000)).
+  //
+  // POR DEBAJO DEL UMBRAL VISIBLE, medido (informe BRECHA, fila 3): con 0,021 rad y 30 s de periodo
+  // la galería quieta cambiaba el 2,08 % de sus píxeles en NUEVE segundos, y solo en contornos de
+  // 1-2 px: ~1 px/s, que el ojo no separa de una foto. Se multiplica por ocho y se COMPONEN dos
+  // senos con periodos que no son múltiplos (9,0 s y 13,1 s): un solo seno sobre el eje del motor
+  // es un metrónomo, y además sobre un cuerpo de revolución girar sobre su propio eje apenas mueve
+  // la silueta (solo las facetas y los accesorios). El cabeceo en X, a un tercio, es lo que mueve
+  // la boca de la campana y el anillo de bancada, que es lo que se ve "respirar".
   vida: {
-    turbinaIdle: 0.00040,   // la turbobomba nunca está del todo parada
-    derivaAmp: 0.021,       // radianes (~1,2 grados) de balanceo del conjunto
-    derivaHz: 0.00021,      // ~30 s de ida y vuelta: se nota sin marear
-    latidoAmp: 0.30,        // cuánto respira el ámbar sobre su valor de la coreografía
+    // 1,25 vueltas/s y NO 2: el rotor lleva 18 álabes (20° entre uno y otro) y a 60 Hz 2 vueltas/s
+    // son 12° por fotograma, más de media separación: la rueda se ve girar HACIA ATRÁS a 8°
+    // por fotograma (efecto estroboscópico, es aritmética). Con 1,25 vueltas/s son 7,5° por
+    // fotograma y el giro se lee hacia delante. (A 30 fps ya alias a partir de 0,83 vueltas/s;
+    // ahí se acepta.) Antes 0,0004 = un álabe cada 0,87 s, invisible.
+    turbinaIdle: 0.00785,   // 1,25 · 2π / 1000 rad/ms
+    derivaAmp: 0.07,        // radianes (4°) de guiñada del conjunto sobre su eje
+    derivaHz: 0.0007,       // periodo 9,0 s: se nota sin marear
+    cabeceoAmp: 0.023,      // radianes (1,3°, un tercio de la deriva) de cabeceo en X
+    cabeceoHz: 0.00048,     // periodo 13,1 s, no múltiplo del de la deriva: nunca se repite igual
+    // 0,5: el emisivo del acento es 0xff7a10 a propósito para que ningún pico recorte a blanco
+    // (ver geometria.ts, crearMateriales): en el pico los aros siguen ámbar.
+    latidoAmp: 0.50,        // cuánto respira el ámbar sobre su valor de la coreografía
     latidoHz: 0.00110,      // ~5,7 s
   },
 
@@ -150,14 +167,22 @@ export const PM = {
       emisivo: 1.05,  // emissiveIntensity en el pico del latido (ver el emisivo del acento en geometria.ts)
     },
     como: {
+      // LAS VENTANAS, CON LA ARITMÉTICA DEL TRAMO (COMO dura 5 000 unidades; ver coreografia.ts):
+      //   · los nueve rótulos acaban de ABRIRSE en rotulos[0] + 8·pasoRotulo/5000 + durRotulo/5000
+      //     = 0,16 + 0,152 + 0,084 = 0,396, y se quedan abiertos hasta `cerrar` (0,089 del tramo);
+      //   · el último CIERRE acaba en cerrar + 8·pasoCierraRotulo/5000 + durCierraRotulo/5000
+      //     = 0,485 + 0,072 + 0,052 = 0,609, con 0,011 de margen antes de logo[0] = 0,62.
+      // Antes cerrar = 0,56 daba 0,684 > logo[0] = 0,60: la marca arrancaba con los rótulos aún
+      // recogiéndose y salían a media opacidad DETRÁS de la placa (informe BRECHA, fila 4,
+      // captura demo-esc-07-como-b). La marca se corrió 0,02 y el reposo (quieto) mide 0,09.
       abrir: [0, 0.12] as [number, number],
       separar: [0.1, 0.34] as [number, number],
-      rotulos: [0.19, 0.43] as [number, number],
-      parallax: [0.46, 0.58] as [number, number],
-      cerrar: 0.56,
-      logo: [0.6, 0.68] as [number, number],
-      quieto: [0.68, 0.78] as [number, number],
-      recomponer: [0.78, 1] as [number, number],
+      rotulos: [0.16, 0.40] as [number, number],
+      parallax: [0.44, 0.58] as [number, number],
+      cerrar: 0.485,
+      logo: [0.62, 0.70] as [number, number],
+      quieto: [0.70, 0.79] as [number, number],
+      recomponer: [0.79, 1] as [number, number],
       rotX: -20,      // se inclina para ver el despiece desde arriba
       bajar: -0.64,   // el despiece se va más ARRIBA que abajo: se baja para centrarlo en el cuadro
       desplazar: -0.6, // el despiece crece hacia la derecha (turbobomba y conductos): se compensa
@@ -176,7 +201,11 @@ export const PM = {
       // Si el motor se apaga del todo, la marca no EMERGE del objeto: se superpone a un fotograma
       // negro y se lee como marca de agua (el mismo plano se conseguiría con un <img>). El motor
       // tiene que seguir ahí, reconocible, detrás.
-      apagado: 0.34,   // a cuánto baja la LUZ del resto del motor mientras manda la marca
+      // 0,15 y no 0,34: con un tercio de luz el despiece seguía compitiendo con la placa (fila 4
+      // del informe BRECHA). COMO es el capítulo CLARO: con 0,15 el resto del motor no se hunde
+      // en negro sino que se aplana a gris sobre el crema, y se sigue reconociendo (medido en
+      // captura a 1440x900, COMO 74 %).
+      apagado: 0.15,   // a cuánto baja la LUZ del resto del motor mientras manda la marca
       borrado: 0.5,    // cuánta OPACIDAD pierde el resto del motor
     },
     cierre: {
@@ -207,10 +236,10 @@ export const PM = {
     adelante: 9,   // cuánto se adelanta la placa HACIA la cámara desde el centro del motor
     // 0,32 y no 0,5. Con medio cuadro de alto el monograma no era un remate: era una pantalla de
     // carga encima del motor, y cada defecto de la malla se veía a tamaño natural. A un tercio del
-    // alto la marca manda igual (el resto del motor está al 34 % de luz y al 50 % de opacidad) y
+    // alto la marca manda igual (el resto del motor está al 15 % de luz y al 50 % de opacidad) y
     // el objeto sigue leyéndose detrás, que es justo lo que pedía este plano.
     alto: 0.32,    // fracción del encuadre efectivo que ocupa la marca
-    emisiva: 0.95, // cuánto se auto-ilumina cuando manda (la luz clave está al 18 % en ese momento)
+    emisiva: 0.95, // cuánto se auto-ilumina cuando manda (la luz clave está al 15 % en ese momento)
     origen: 'propio',
   },
 

@@ -351,9 +351,14 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
       0,
     );
     rig.sacudida.rotation.z = v * 0.35 * Math.sin(tiempo * PM.coreo.cierre.vibraHz * 2.3);
-    // 2b. LA DERIVA. Balanceo lentísimo con el reloj del NAVEGADOR: es lo único que se mueve cuando
-    //     el visitante deja de bajar. Mismo grupo que el temblor y también escrito en absoluto.
+    // 2b. LA DERIVA. Balanceo lento con el reloj del NAVEGADOR: es lo único que se mueve cuando el
+    //     visitante deja de bajar. Mismo grupo que el temblor y también escrito en absoluto.
+    //     Son DOS senos con periodos que no son múltiplos (ver PM.vida): la guiñada sobre el eje
+    //     del motor (Y) y un cabeceo a un tercio (X). Solo con la guiñada, un cuerpo de revolución
+    //     apenas cambia de silueta y encima se lee como un metrónomo; el cabeceo es lo que mueve
+    //     la boca de la campana. `rotation.x` no lo escribe nadie más: el temblor (2a) va en Z.
     rig.sacudida.rotation.y = PM.vida.derivaAmp * Math.sin(ahora * PM.vida.derivaHz);
+    rig.sacudida.rotation.x = PM.vida.cabeceoAmp * Math.sin(ahora * PM.vida.cabeceoHz);
 
     // 3. La turbobomba coge vueltas. Ángulo = f(tiempo), no un contador que se incrementa.
     rig.turbina.rotation.y = estado.rpm * tiempo * PM.coreo.cierre.rpm + ahora * PM.vida.turbinaIdle;

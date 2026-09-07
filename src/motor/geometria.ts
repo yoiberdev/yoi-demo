@@ -383,8 +383,20 @@ export interface Materiales {
 }
 
 export function crearMateriales(): Materiales {
+  // POLYGON OFFSET en todas las caras iluminadas. Las aristas de pliegue son LineSegments que
+  // pasan EXACTAMENTE por la superficie de la cara: en el z-test empatan y gana uno u otro según
+  // el redondeo de cada píxel, y en la campana salían puntos negros sueltos y crestas punteadas
+  // (informe BRECHA, fila 5, render/zoom-aristas y zoom-curva). Con factor 1 / units 1 las caras
+  // se empujan un pelín hacia el fondo y la línea gana siempre donde coinciden. Los cascos de
+  // silueta (BackSide, MeshBasic) y la propia línea no lo necesitan: no compiten con nadie.
+  // Medido a 1440x900 y 2x: los píxeles oscuros aislados de la mitad inferior del motor bajan
+  // (cifras en el json del carril "motor" de la vuelta 1).
   const plano = (color: number, extra: object = {}) =>
-    new MeshLambertMaterial({ color: new Color(color), flatShading: true, ...extra });
+    new MeshLambertMaterial({
+      color: new Color(color), flatShading: true,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1,
+      ...extra,
+    });
   return {
     blanco: plano(M.paleta.blanco, { side: DoubleSide }),
     medio: plano(M.paleta.medio),
