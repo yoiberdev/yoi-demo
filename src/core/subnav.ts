@@ -32,13 +32,24 @@ export function montarSubnav(scroller: Scroller): Subnav {
   };
   barra.addEventListener('click', clic);
 
+  const actualizar = (progreso: number): void => {
+    const [a, b] = P.subnav.visible;
+    nav.classList.toggle('is-visible', progreso > a && progreso < b);
+    if (!drag.grabbed) drag.setX(progreso * recorrido(), true);
+  };
+
+  // EL CURSOR SIGUE AL SCROLL CRUDO, NO AL PROXY (fila 26 del informe). El proxy va suavizado y el
+  // cursor llegaba ~200 ms tarde. `scroller.progreso()` es scrollY / maxScroll y se pinta en el
+  // propio evento `scroll`, o sea antes del siguiente fotograma, sin esperar al tic del suavizado.
+  // El callback del scroller también llama a `actualizar` (así el resize y el primer tic la dejan
+  // bien aunque no haya evento): pintar dos veces el mismo número no cuesta nada.
+  const alScroll = (): void => actualizar(scroller.progreso());
+  window.addEventListener('scroll', alScroll, { passive: true });
+
   return {
-    actualizar(progreso) {
-      const [a, b] = P.subnav.visible;
-      nav.classList.toggle('is-visible', progreso > a && progreso < b);
-      if (!drag.grabbed) drag.setX(progreso * recorrido(), true);
-    },
+    actualizar,
     revertir() {
+      window.removeEventListener('scroll', alScroll);
       barra.removeEventListener('click', clic);
       drag.revert();
     },

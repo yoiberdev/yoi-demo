@@ -135,8 +135,8 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
       // 2) la ranura fija. En ancho normal, columna izquierda o derecha repartidas alrededor del
       //    centro; en compacto, dos bandas (arriba y abajo) con todo el texto pegado a la izquierda.
       // En compacto el LADO lo pone la banda, no la pieza: la de arriba a la izquierda y la de
-      // abajo a la derecha. Abajo a la izquierda ya vive el rótulo de capítulo (#rotulo, a 4,5 rem
-      // del borde en compacto) y el último rótulo se le escribía encima.
+      // abajo a la derecha. (Se decidió cuando el rótulo de capítulo vivía abajo a la izquierda;
+      // hoy el titular va arriba a la derecha en compacto, y las bandas se han dejado como estaban.)
       const lado = compacto ? (ranuraI < mitad ? -1 : 1) : pieza.lado;
       const bx = compacto
         ? (lado < 0 ? ancho * PM.rotulos.margen : ancho * (1 - PM.rotulos.margen))

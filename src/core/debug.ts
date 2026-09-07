@@ -30,11 +30,20 @@ export function montarDebug(m: Maestro, scroller: Scroller, proxy: Proxy, escena
     fps = Math.round(1000 / Math.max(1, ahora - ultimo));
     ultimo = ahora;
     const { tramo, progreso } = tramoActual(m, proxy.currentTime);
-    texto.textContent = `maestro ${Math.round(proxy.currentTime)} / ${m.total}\n${tramo} ${Math.round(progreso * 100)}%\nscroll ${Math.round(window.scrollY)} / ${scroller.maxScroll}\nfps ~${fps}\nescena ${escena.estado()} · ${escena.capacidad.calidad} (${escena.capacidad.motivo})\nlogo fuera ${Math.round(salida.progreso() * 100)}% (${salida.gesto})`;
+    // "objetivo" es el tiempo al que persigue el proxy (el scroll traducido); "quieto" cuando ya llegó.
+    texto.textContent = `maestro ${Math.round(proxy.currentTime)} / ${m.total}\n${tramo} ${Math.round(progreso * 100)}%\nscroll ${Math.round(window.scrollY)} / ${scroller.maxScroll}\nobjetivo ${Math.round(scroller.objetivo())} · ${scroller.quieto() ? 'quieto' : 'persiguiendo'}\nfps ~${fps}\nescena ${escena.estado()} · ${escena.capacidad.calidad} (${escena.capacidad.motivo})\nlogo fuera ${Math.round(salida.progreso() * 100)}% (${salida.gesto})`;
     requestAnimationFrame(pintar);
   };
   requestAnimationFrame(pintar);
-  Object.assign(window, { __yoi: { maestro: m.tl, labels: m.L, proxy, scroller, escena, salida } });
+  // Para el QA: `tiempoEsperado(px?)` traduce un scroll (por defecto el actual) a tiempo del maestro
+  // con los tramos de ahora, y `quieto()` dice si el suavizado ha llegado.
+  Object.assign(window, {
+    __yoi: {
+      maestro: m.tl, labels: m.L, proxy, scroller, escena, salida,
+      tiempoEsperado: (px: number = window.scrollY) => scroller.tiempoParaPx(px),
+      quieto: () => scroller.quieto(),
+    },
+  });
   return () => {
     vivo = false;
     caja.remove();

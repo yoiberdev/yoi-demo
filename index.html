@@ -64,7 +64,12 @@
         </div>
         <!-- Ya no hay <h1> de texto partido: el logo ES la marca, y el titular "yoiber." repetía en
              letra lo que el logo acaba de dibujar (y se le montaba encima). Lo que queda debajo es
-             lo que dice algo que el logo no dice. -->
+             lo que dice algo que el logo no dice: el lema, una línea de qué hace Yoiber y adónde ir.
+             Los tres los anima effects/hero.ts (entran a INTRO_ON+2900, cuando el logo ya está
+             quieto, y se retiran en HERO_OUT). La flecha del enlace se mueve en bucle por CSS. -->
+        <p id="lema">Software que sigue funcionando cuando nadie lo mira.</p>
+        <p id="nota">Desarrollador full-stack. Sistemas distribuidos, dispositivos en campo e interfaces para datos en vivo.</p>
+        <a id="bajar" href="#galeria">Ver los proyectos <span class="flecha" aria-hidden="true">↓</span></a>
       </div>
     </header>
 
@@ -91,6 +96,38 @@
       </section>
       <section id="cierre" data-label="CIERRE" data-chapter="cierre"></section>
     </div>
+
+    <!-- EL PIE. En flujo, después de los espaciadores: cuando el maestro se acaba (el motor ya se
+         ha fundido a negro al final de CIERRE) el pie sube por encima de todas las capas fijas.
+         Sus bloques entran con el scroll desde effects/pie.ts, fuera del maestro. Los cinco
+         proyectos son los mismos que las tarjetas, con el mismo enlace de cada .acceso. -->
+    <footer id="pie">
+      <div class="pie-bloque pie-cabecera">
+        <h2>Yoiber</h2>
+        <p class="que">Backend en Python y Node, interfaces en React y TypeScript, y máquinas Linux muy lejos de cualquier teclado.</p>
+      </div>
+      <div class="pie-lado">
+        <div class="pie-bloque">
+          <h3>Contacto</h3>
+          <ul class="pie-lista">
+            <li><a href="https://github.com/yoiberdev" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://linkedin.com/in/yoiberdev/" target="_blank" rel="noopener">LinkedIn</a></li>
+            <!-- correo: pendiente de Yoiber -->
+          </ul>
+        </div>
+        <div class="pie-bloque">
+          <h3>Proyectos</h3>
+          <ul class="pie-lista pie-proyectos">
+            <li><a href="https://sysrrhh-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">SysRRHH</a><span class="pila">NestJS · Prisma · PostgreSQL · React</span></li>
+            <li><a href="https://kuidy-core-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">KUIDY-CORE</a><span class="pila">Hono · Drizzle · PostgreSQL con JSONB · React</span></li>
+            <li><a href="https://techdoc-api-164532276262.us-central1.run.app/api/swagger-ui.html" target="_blank" rel="noopener">TechDocAPI</a><span class="pila">Java 21 · Spring Boot · JPA · PostgreSQL</span></li>
+            <li><a href="https://financial-api-demo-164532276262.us-central1.run.app" target="_blank" rel="noopener">API financiera reactiva</a><span class="pila">Java 21 · WebFlux · R2DBC · Maven multi-módulo</span></li>
+            <li><a href="https://comandas-dev.kipups.com" target="_blank" rel="noopener">Kip-Up Comandas</a><span class="pila">Next.js · Prisma · Socket.IO · ESC/POS</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="pie-bloque pie-final">© 2026 Yoiber · <a href="#" id="arriba">Volver arriba</a></p>
+    </footer>
 
     <!-- LA GALERÍA. Cinco proyectos con demo viva. Las secciones de #capitulos son espaciadores:
          lo que se ve vive aquí, en una capa fija, y el reloj del maestro decide cuál está delante.
@@ -147,6 +184,8 @@
       </article>
     </div>
 
+    <!-- El titular de capítulo (effects/titulo.ts): el nombre grande arriba a la izquierda y, en
+         la galería, el contador de tarjetas debajo. Sin clics: es una capa fija encima de todo. -->
     <div id="rotulo" class="capa" aria-live="polite">
       <span id="capitulo-nombre"></span>
       <span id="capitulo-progreso"></span>

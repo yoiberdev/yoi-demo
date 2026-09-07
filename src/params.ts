@@ -19,6 +19,12 @@ export const P = {
     // título de texto partido que duraba eso; ahora manda la coreografía de yoiber.com.
     introDuration: LOGO.arranque + LOGO.entrada, // 5100
     alturas: { HERO_OUT: 2, GALERIA: 10, COMO: 5, CIERRE: 2 } as Record<string, number>, // en alturas de viewport; 1 altura = 1000 unidades del maestro
+    // El suavizado lo hace core/scroller.ts con un Timer propio por tiempo (no el `sync` de
+    // onScroll: ver allí por qué). `sync` sigue siendo el factor; estos dos son su mecánica.
+    suavizado: {
+      fotograma: 1000 / 60, // ms: el fotograma para el que está definido el factor de la librería
+      umbral: 0.5,          // unidades del maestro: por debajo se clava en el objetivo y el Timer se para
+    },
     origen: 'propio',
   },
   // El hero: el logo (GSAP, effects/logo-intro.ts + logo-salida.ts) y el texto de debajo
@@ -102,7 +108,39 @@ export const P = {
   // LA GALERÍA. `arranque` es la fracción del capítulo que se le regala al motor para que se
   // aparte ANTES de que entre la primera tarjeta. Sin él, la tarjeta aparece encima de la campana:
   // el desvío del motor empieza al 10 % del tramo y las tarjetas empezaban al 0 %.
-  galeria: { arranque: 0.18, origen: 'propio' },
+  // `margenBajar`: "Ver los proyectos" (#bajar) aterriza en la PRIMERA TARJETA, no al principio de
+  // GALERIA. Estas unidades por encima de `arranque` caen justo PASADO el cruce de entrada, que dura
+  // min(500, 14 % del paso) = 230 unidades (galeria.ts): así se llega con la tarjeta ya entera. Con
+  // 60 se caía al 26 % del cruce y, con su `out(3)`, la tarjeta se quedaba a opacidad 0,6 (medido).
+  galeria: { arranque: 0.18, margenBajar: 250, origen: 'propio' },
+
+  // EL TITULAR DE CAPÍTULO (effects/titulo.ts): el gesto con que entra cuando cambia el nombre.
+  // Va fuera del maestro (es la reacción a un cambio de estado, no un instante del reloj).
+  titulo: {
+    gesto: {
+      duration: 380,   // ms: más corto que el cruce más corto del maestro (500), para no pisar el siguiente cambio
+      y: 14,           // px que sube al entrar
+      ease: 'out(3)',
+    },
+    origen: 'propio',
+  },
+
+  // EL PIE DE PÁGINA (effects/pie.ts). `tapa`: cuando el borde inferior de #capitulos sube por
+  // encima de esta fracción de la ventana ya manda el "Yoiber" del pie y el titular se vacía.
+  // `entrada`: los bloques suben de 0 a 1 con scrub exacto mientras el pie asoma (sync: true).
+  pie: {
+    tapa: 0.6,
+    entrada: {
+      y: 24,            // px que sube cada bloque
+      duration: 600,    // ms nominales: con sync el reloj es el scroll, así que solo cuenta la proporción con el stagger
+      stagger: 90,      // ms entre bloque y bloque (4 bloques: el último arranca al 45 % del recorrido)
+      ease: 'out(3)',
+      // Umbrales en el orden de v4: '<borde del contenedor> <borde del objetivo>'.
+      enter: 'bottom top',   // el borde inferior de la ventana toca el borde superior del pie: asoma
+      leave: 'center top',   // el borde superior del pie llega al centro de la ventana: ya está entero
+    },
+    origen: 'propio',
+  },
 
   subnav: { visible: [0.02, 0.98] as [number, number], origen: 'propio' },
 };

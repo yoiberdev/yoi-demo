@@ -1,4 +1,5 @@
 import '@fontsource-variable/space-grotesk';
+import '@fontsource-variable/jetbrains-mono';
 import './styles/base.css';
 import { animate, createScope, type JSAnimation, type Scope } from 'animejs';
 import { P } from './params';
@@ -12,8 +13,12 @@ import { montarHero } from './effects/hero';
 import { montarGaleria } from './effects/galeria';
 import { montarLogoIntro } from './effects/logo-intro';
 import { montarLogoSalida } from './effects/logo-salida';
+import { montarTitulo } from './effects/titulo';
+import { montarPie } from './effects/pie';
 
-const NOMBRES: Record<string, string> = { INTRO: 'intro', HERO_OUT: 'intro', GALERIA: 'galería', COMO: 'cómo está hecho', CIERRE: 'cierre' };
+// Los nombres del titular de capítulo (#capitulo-nombre, effects/titulo.ts). INTRO y HERO_OUT van
+// vacíos: ahí el logo está en pantalla y es él quien dice de quién es la página.
+const NOMBRES: Record<string, string> = { INTRO: '', HERO_OUT: '', GALERIA: 'Proyectos', COMO: 'Por dentro', CIERRE: 'Encendido' };
 
 // Las secciones son espaciadores: su altura fija cuánto scroll dura cada tramo.
 function ajustarAlturas(): void {
@@ -34,11 +39,10 @@ function montar(self?: Scope): () => void {
   const galeria = montarGaleria(m, reduce);
   // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. Ver core/escena.ts.
   // El reloj que lee el motor 3D es el del PROPIO MAESTRO, no `proxy`. Son el mismo número casi
-  // siempre, pero `proxy` solo es fiable justo después de un tic de scroll: al redimensionar,
-  // `scroller.refrescar()` reconstruye la línea de tiempo y el maestro se queda en su etiqueta
-  // mientras `proxy` conserva el valor viejo. Con el escenario CSS eso no se notaba (nadie lee
-  // `proxy` por fotograma); el motor lo lee 60 veces por segundo para el temblor, el parpadeo del
-  // penacho y las vueltas de la turbina, y ahí se veía el salto.
+  // siempre, pero `proxy` es el OBJETIVO al que el scroller acerca el maestro tic a tic (ver
+  // core/scroller.ts): entre un tic y el siguiente pueden diferir, y el motor lee el reloj 60 veces
+  // por segundo para el temblor, el parpadeo del penacho y las vueltas de la turbina. Leyendo el
+  // maestro, lo que se dibuja es siempre lo que el maestro acaba de colocar.
   const escena = montarEscena(m, {
     reduce,
     tiempo: () => m.tl.currentTime,
@@ -97,36 +101,68 @@ function montar(self?: Scope): () => void {
     },
   });
 
-  const rotuloNombre = document.querySelector<HTMLElement>('#capitulo-nombre');
-  const rotuloProgreso = document.querySelector<HTMLElement>('#capitulo-progreso');
   let introTemporal: JSAnimation | null = null;
 
+  // El titular de capítulo y el pie viven FUERA del maestro (el porqué, en la cabecera de cada
+  // módulo): el titular reacciona a un cambio de nombre y el pie mide su propio scroll.
+  const titulo = montarTitulo(reduce);
+  const quitarPie = montarPie(reduce);
+
+  // ¿Ya asoma el pie? Se mira desde el scroll y el tramo de CIERRE del scroller (su `fin` es el
+  // borde inferior de #capitulos menos una ventana) en vez de medir el DOM: este callback corre
+  // justo después de que el maestro escriba en decenas de nodos, y un getBoundingClientRect aquí
+  // forzaría el layout en cada tic.
+  const pieALaVista = (): boolean => {
+    const cierre = scroller.tramos.find((t) => t.X === 'CIERRE');
+    return cierre !== undefined && window.scrollY > cierre.fin + window.innerHeight * (1 - P.pie.tapa);
+  };
   const pintarRotulo = (): void => {
-    const { tramo, progreso } = tramoActual(m, proxy.currentTime);
-    if (rotuloNombre) rotuloNombre.textContent = NOMBRES[tramo] ?? tramo;
-    if (rotuloProgreso) rotuloProgreso.textContent = tramo === 'GALERIA' && galeria.total
-      ? `${Math.min(galeria.total, Math.floor(progreso * galeria.total) + 1)} / ${galeria.total}` : '';
+    const { tramo } = tramoActual(m, proxy.currentTime);
+    // El contador lo reparte la galería (indice): -1 antes de la primera tarjeta y fuera del capítulo.
+    const k = galeria.indice(proxy.currentTime);
+    titulo.pintar(pieALaVista() ? '' : (NOMBRES[tramo] ?? tramo), k >= 0 ? `${k + 1} / ${galeria.total}` : '');
   };
 
   const tema = montarTema(m);
+  // EL TRASPASO DE LA INTRO va en el segundo callback (`manda`): mientras la intro corre por tiempo
+  // y el visitante no ha bajado, el scroller ni toca el proxy. Antes lo escribía igual y este
+  // callback solo se saltaba el seek: dos escritores para el mismo número, y al redimensionar en
+  // mitad de la intro el suavizado tiraba del reloj. En cuanto baja 2 px la intro se para y el
+  // scroll toma el mando para siempre: una intro parada ya no vuelve a mandar aunque el scroll
+  // regrese a 0 (antes sí, y la página se quedaba congelada en el fotograma de la parada).
   const scroller = crearScroller(m, proxy, () => {
-    if (introTemporal && !introTemporal.completed) {
-      if (window.scrollY < 2) return; // el scroller aún no manda: la intro sigue por tiempo
-      introTemporal.pause(); // el usuario hizo scroll durante la intro: el scroll toma el mando
-    }
     colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
     galeria.actualizar(proxy.currentTime);
+    hero.actualizar(proxy.currentTime);
     pintarRotulo();
     subnav.actualizar(scroller.progreso());
+  }, () => {
+    if (!introTemporal || introTemporal.completed || introTemporal.paused) return true;
+    if (window.scrollY < 2) return false; // el scroller aún no manda: la intro sigue por tiempo
+    introTemporal.pause(); // el usuario hizo scroll durante la intro: el scroll toma el mando
+    return true;
   });
   const subnav = montarSubnav(scroller);
   const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy, escena, salidaLogo) : null;
 
+  // "Ver los proyectos": el enlace del hero. preventDefault porque el href="#galeria" apuntaría al
+  // espaciador, o sea al principio del tramo y no a la primera tarjeta. Con scroll-behavior: smooth
+  // en el body, scrollTo anima; si la intro por tiempo aún corre, el scroller la para al primer tic.
+  const bajar = document.querySelector<HTMLAnchorElement>('#bajar');
+  const irAProyectos = (ev: Event): void => {
+    ev.preventDefault();
+    window.scrollTo({ top: scroller.pxParaTiempo(m.L.GALERIA + m.duracion('GALERIA') * P.galeria.arranque + P.galeria.margenBajar) });
+  };
+  bajar?.addEventListener('click', irAProyectos);
+
   if (reduce || window.scrollY > 1) {
-    // Recarga a mitad de página o movimiento reducido: sin intro por tiempo.
-    proxy.currentTime = m.L.INTRO_END;
-    colocar(m.L.INTRO_END);
+    // Recarga a mitad de página o movimiento reducido: sin intro por tiempo. El reloj se pone
+    // directamente donde está el scroll (con scroll 0, `objetivo()` es INTRO_END: la intro ya
+    // acabada). Antes se ponía en INTRO_END siempre y el suavizado recorría la página entera desde
+    // el hero hasta la posición que el navegador había restaurado.
+    proxy.currentTime = scroller.objetivo();
+    colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
   } else {
     // La intro corre por tiempo y dura lo que la entrada del logo (P.scroll.introDuration sale de
@@ -151,8 +187,7 @@ function montar(self?: Scope): () => void {
     window.removeEventListener('scroll', pedirYa);
     temporizador = window.setTimeout(() => {
       ajustarAlturas();
-      scroller.refrescar();
-      colocar(proxy.currentTime);   // refrescar() reconstruye y deja el maestro en 0: se repone
+      scroller.refrescar();   // rehace los tramos y en su primer tic vuelve a colocar el maestro
     }, 250);
   };
   window.addEventListener('resize', alRedimensionar);
@@ -160,8 +195,11 @@ function montar(self?: Scope): () => void {
   return () => {
     window.removeEventListener('resize', alRedimensionar);
     window.clearTimeout(temporizador);
+    bajar?.removeEventListener('click', irAProyectos);
     introTemporal?.revert();
     quitarDebug?.();
+    quitarPie();
+    titulo.revertir();
     escena.revertir();
     galeria.revertir();
     tema.revertir();
