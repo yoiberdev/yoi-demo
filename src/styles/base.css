@@ -159,9 +159,16 @@ html.motor-on #stage { opacity: 0; }
 @media (max-aspect-ratio: 1/1) {
   .tarjeta {
     right: auto; left: 6vw; width: 88vw;
-    top: auto; bottom: 8.5rem; display: block;
+    top: auto; bottom: 7rem; display: block;
   }
   .tarjeta .detalle { display: none; }   /* en móvil, lo esencial: qué es, con qué, y el enlace */
+  /* En un teléfono la ventana real ronda los 660 px de alto. Con la captura a su tamaño natural la
+     tarjeta se comía el 69 % de la pantalla y el motor, que en vertical sube, quedaba escondido
+     detrás. La captura se recorta a 19vh: sigue enseñando el producto y deja sitio al motor. */
+  .tarjeta .captura { max-height: 19vh; margin-bottom: 0.6rem; }
+  .tarjeta h2 { font-size: 1.45rem; margin-bottom: 0.4rem; }
+  .tarjeta .que { font-size: 0.95rem; margin-bottom: 0.6rem; }
+  .tarjeta .pila { margin-bottom: 0.5rem; }
 }
 
 /* Rótulo de capítulo */
