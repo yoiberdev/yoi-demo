@@ -40,8 +40,33 @@ export const P = {
     // tarde que el logo: el logo despeja el centro y el texto se lo lleva mientras el motor sube.
     salidaTexto: 0.6,
     salidaLogo: 0.55,
+    // EL FONDO VIVO DE LA INTRO (effects/fondo-intro.ts): un anillo de marcas detrás del logo, como
+    // el bisel de un instrumento, y un barrido que le da la vuelta. Medido antes: de +3 s a +11 s
+    // el hero no cambiaba un píxel salvo la flotación del logo (fila 15 del informe).
+    fondo: {
+      marcas: 72,          // marcas del anillo, una cada 5°
+      cadaLarga: 6,        // una de cada tantas es larga: 12 marcas largas, como las horas de una esfera
+      opacidad: 0.35,      // tope de opacidad de todo el anillo: NUNCA compite con el logo
+      // El encendido va DENTRO del maestro, con el texto (INTRO_ON + texto.delay): cada marca 12 ms
+      // después de la anterior, en el sentido de las agujas. 72 x 12 + 500 = 1 364 ms, y acaba a
+      // 4 564 < 5 100 (INTRO_END): se enciende entero antes de que la intro por tiempo termine.
+      encendido: { duration: 500, stagger: 12 },
+      // Los dos bucles FUERA del maestro (reloj del navegador, no del scroll). El barrido es el que
+      // pone píxeles en movimiento: un arco de 60° que da una vuelta cada 12 s (30°/s). El anillo
+      // de marcas gira en sentido contrario y muy despacio: una vuelta cada 4 min (1,5°/s), lo justo
+      // para que la esfera no parezca pintada.
+      barrido: { vuelta: 12000, arco: 60, grosor: 7 }, // ms por vuelta; grados del arco; grosor en unidades del viewBox (radio 100)
+      giro: { vuelta: 240000 },                        // ms por vuelta del anillo de marcas, al revés que el barrido
+      // Geometría en unidades del viewBox (radio 100): las marcas van de `interior` al borde.
+      radio: { marca: 91, larga: 85, barrido: 79 },
+    },
     origen: 'propio',
   },
+  // LA CABECERA FIJA (effects/cabecera.ts). Entra con el texto del hero (mismo instante y ease:
+  // INTRO_ON + intro.texto.delay) y se queda toda la página. `dentro`: "Por dentro" lleva al 30 %
+  // de COMO, que es donde el despiece ya está abierto y con rótulos (antes del 30 % el motor
+  // todavía se está separando).
+  cabecera: { dentro: 0.3, origen: 'propio' },
   panel: {
     entrada: { rotateX: 70, y: '70vh', scale: 0.6 },
     galeria: { rotateY: 18 },
@@ -112,7 +137,37 @@ export const P = {
   // GALERIA. Estas unidades por encima de `arranque` caen justo PASADO el cruce de entrada, que dura
   // min(500, 14 % del paso) = 230 unidades (galeria.ts): así se llega con la tarjeta ya entera. Con
   // 60 se caía al 26 % del cruce y, con su `out(3)`, la tarjeta se quedaba a opacidad 0,6 (medido).
-  galeria: { arranque: 0.18, margenBajar: 250, origen: 'propio' },
+  galeria: {
+    arranque: 0.18,
+    margenBajar: 250,
+    // LA MINI-SECUENCIA DE CADA TARJETA (effects/galeria.ts). Antes la tarjeta entraba en bloque
+    // (opacidad + 26 px); ahora cada pieza entra por su turno: título, captura destapándose de
+    // arriba abajo, los tres párrafos escalonados, y el acceso y el aviso al final.
+    // TODO EN FRACCIONES DEL CRUCE, no en unidades: el cruce sigue siendo min(500, 14 % del paso)
+    // (230 unidades con cinco tarjetas en 10 alturas), así que el reparto y `indice()` no cambian y
+    // el contador sigue diciendo lo mismo. Con el cruce nominal de 500, un stagger de 0,16 son los
+    // 80 ms del informe; con el de hoy, 37. Cada pieza acaba como muy tarde en 1,0 (la entrada) y
+    // la salida es más corta (0,7 del cruce) y en orden inverso: lo último que entró es lo primero
+    // que se va, y el título es lo último que queda.
+    secuencia: {
+      // El contenedor de la tarjeta se enciende en esta fracción del cruce al empezar la entrada y
+      // se apaga en la misma al acabar la salida (el porqué, en galeria.ts): 11 unidades de hoy.
+      contenedor: 0.05,
+      entrada: {
+        titulo:   { ini: 0,    dur: 0.55, y: 28, ease: 'out(3)' },
+        captura:  { ini: 0.10, dur: 0.60, ease: 'out(4)' },                      // opacidad + clip-path de arriba abajo
+        parrafos: { ini: 0.22, dur: 0.42, y: 18, stagger: 0.16, ease: 'out(3)' }, // .que, .pila, .detalle: el último acaba en 0,96
+        acceso:   { ini: 0.56, dur: 0.30, y: 18, stagger: 0.14, ease: 'out(3)' }, // .acceso, .aviso: el aviso acaba en 1,00
+      },
+      salida: {
+        acceso:   { ini: 0,    dur: 0.26, y: 12, stagger: 0.06, ease: 'in(2)' },
+        parrafos: { ini: 0.06, dur: 0.28, y: 12, stagger: 0.08, ease: 'in(2)' }, // al revés: detalle, pila, que
+        captura:  { ini: 0.18, dur: 0.36, ease: 'in(2)' },
+        titulo:   { ini: 0.30, dur: 0.40, y: 28, ease: 'in(2)' },                 // acaba en 0,70
+      },
+    },
+    origen: 'propio',
+  },
 
   // EL TITULAR DE CAPÍTULO (effects/titulo.ts): el gesto con que entra cuando cambia el nombre.
   // Va fuera del maestro (es la reacción a un cambio de estado, no un instante del reloj).

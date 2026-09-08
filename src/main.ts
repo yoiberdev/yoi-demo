@@ -7,9 +7,12 @@ import { crearMaestro, tramoActual } from './core/maestro';
 import { crearScroller, type Proxy } from './core/scroller';
 import { montarEscena } from './core/escena';
 import { montarTema } from './core/tema';
-import { montarSubnav } from './core/subnav';
+import { montarAcento } from './core/acento';
+import { montarSubnav, type Parada } from './core/subnav';
 import { montarDebug } from './core/debug';
 import { montarHero } from './effects/hero';
+import { montarFondoIntro } from './effects/fondo-intro';
+import { montarCabecera, tiempoPrimeraTarjeta } from './effects/cabecera';
 import { montarGaleria } from './effects/galeria';
 import { montarLogoIntro } from './effects/logo-intro';
 import { montarLogoSalida } from './effects/logo-salida';
@@ -19,6 +22,14 @@ import { montarPie } from './effects/pie';
 // Los nombres del titular de capítulo (#capitulo-nombre, effects/titulo.ts). INTRO y HERO_OUT van
 // vacíos: ahí el logo está en pantalla y es él quien dice de quién es la página.
 const NOMBRES: Record<string, string> = { INTRO: '', HERO_OUT: '', GALERIA: 'Proyectos', COMO: 'Por dentro', CIERRE: 'Encendido' };
+// Las paradas de la sub-nav (core/subnav.ts): una por tramo, en su `ini`. HERO_OUT no tiene
+// titular (es el logo yéndose) pero sí parada: es el principio de la página.
+const PARADAS: Parada[] = [
+  { X: 'HERO_OUT', nombre: 'Inicio' },
+  { X: 'GALERIA', nombre: NOMBRES.GALERIA },
+  { X: 'COMO', nombre: NOMBRES.COMO },
+  { X: 'CIERRE', nombre: NOMBRES.CIERRE },
+];
 
 // Las secciones son espaciadores: su altura fija cuánto scroll dura cada tramo.
 function ajustarAlturas(): void {
@@ -35,8 +46,17 @@ function montar(self?: Scope): () => void {
   const proxy: Proxy = { currentTime: 0 };
   // El texto del hero (lema, nota y enlace) y el velo: Anime.js, dentro del maestro.
   const hero = montarHero(m, reduce);
+  // El anillo de marcas detrás del logo: se enciende en el maestro y gira con el reloj del
+  // navegador. Sus bucles se apuntan en el registro del scope, como la flotación del logo.
+  const fondo = montarFondoIntro(m, reduce);
+  if (self) for (const b of fondo.bucles) ((self.data.loops ??= new Set()) as Set<unknown>).add(b);
+  // La cabecera entra con el texto del hero (tween en el maestro). El traductor de scroll se le
+  // pasa como función: el scroller nace más abajo, después de init(), y los clics llegan después.
+  const cabecera = montarCabecera(m, reduce, (t) => scroller.pxParaTiempo(t));
   // Antes de tl.init(): la galería añade sus tweens al maestro y init() los tiene que ver.
   const galeria = montarGaleria(m, reduce);
+  // El acento vigente (core/acento.ts) se decide desde el reloj con el reparto de la galería.
+  const acento = montarAcento(galeria);
   // El escenario: CSS siempre, y el motor 3D por encima si la máquina lo aguanta. Ver core/escena.ts.
   // El reloj que lee el motor 3D es el del PROPIO MAESTRO, no `proxy`. Son el mismo número casi
   // siempre, pero `proxy` es el OBJETIVO al que el scroller acerca el maestro tic a tic (ver
@@ -133,8 +153,11 @@ function montar(self?: Scope): () => void {
   const scroller = crearScroller(m, proxy, () => {
     colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
+    acento.actualizar(proxy.currentTime);
     galeria.actualizar(proxy.currentTime);
     hero.actualizar(proxy.currentTime);
+    cabecera.actualizar(proxy.currentTime);
+    fondo.actualizar(proxy.currentTime);
     pintarRotulo();
     subnav.actualizar(scroller.progreso());
   }, () => {
@@ -143,16 +166,17 @@ function montar(self?: Scope): () => void {
     introTemporal.pause(); // el usuario hizo scroll durante la intro: el scroll toma el mando
     return true;
   });
-  const subnav = montarSubnav(scroller);
+  const subnav = montarSubnav(scroller, PARADAS);
   const quitarDebug = location.search.includes('debug') ? montarDebug(m, scroller, proxy, escena, salidaLogo) : null;
 
   // "Ver los proyectos": el enlace del hero. preventDefault porque el href="#galeria" apuntaría al
-  // espaciador, o sea al principio del tramo y no a la primera tarjeta. Con scroll-behavior: smooth
+  // espaciador, o sea al principio del tramo y no a la primera tarjeta (el cálculo, compartido con
+  // el enlace Proyectos de la cabecera, está en effects/cabecera.ts). Con scroll-behavior: smooth
   // en el body, scrollTo anima; si la intro por tiempo aún corre, el scroller la para al primer tic.
   const bajar = document.querySelector<HTMLAnchorElement>('#bajar');
   const irAProyectos = (ev: Event): void => {
     ev.preventDefault();
-    window.scrollTo({ top: scroller.pxParaTiempo(m.L.GALERIA + m.duracion('GALERIA') * P.galeria.arranque + P.galeria.margenBajar) });
+    window.scrollTo({ top: scroller.pxParaTiempo(tiempoPrimeraTarjeta(m)) });
   };
   bajar?.addEventListener('click', irAProyectos);
 
@@ -164,6 +188,9 @@ function montar(self?: Scope): () => void {
     proxy.currentTime = scroller.objetivo();
     colocar(proxy.currentTime);
     tema.actualizar(proxy.currentTime);
+    acento.actualizar(proxy.currentTime);
+    cabecera.actualizar(proxy.currentTime);
+    fondo.actualizar(proxy.currentTime);
   } else {
     // La intro corre por tiempo y dura lo que la entrada del logo (P.scroll.introDuration sale de
     // los números del original). Sin onComplete: el bucle de flotación lo arranca el propio logo
@@ -174,6 +201,7 @@ function montar(self?: Scope): () => void {
       ease: 'linear',
       onUpdate: () => {
         colocar(proxy.currentTime);
+        cabecera.actualizar(proxy.currentTime); // la cabecera se activa a mitad de la intro
         pintarRotulo();
       },
     });
@@ -202,6 +230,9 @@ function montar(self?: Scope): () => void {
     titulo.revertir();
     escena.revertir();
     galeria.revertir();
+    acento.revertir();
+    cabecera.revertir();
+    fondo.revertir();
     tema.revertir();
     subnav.revertir();
     scroller.revertir();
