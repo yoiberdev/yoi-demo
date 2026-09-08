@@ -42,6 +42,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
   capa.append(svg);
 
   const cajas: HTMLElement[] = [];
+  const titulos: HTMLElement[] = [];
   const lineas: SVGPolylineElement[] = [];
   const puntos: SVGCircleElement[] = [];
   // Dos repartos de ranuras: el completo (nueve rótulos) y el compacto (seis). En una pantalla
@@ -63,6 +64,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
     caja.append(t, n);
     capa.append(caja);
     cajas.push(caja);
+    titulos.push(t);
 
     const linea = document.createElementNS(NS, 'polyline');
     const punto = document.createElementNS(NS, 'circle');
@@ -76,6 +78,8 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
     ranuraCompacta.push(pieza.movil ? nCompacto++ : -1);
   }
   host.append(capa);
+  // cuántas ranuras compactas van en la banda de arriba (el resto, abajo)
+  const mitad = Math.min(PM.rotulos.enBandaAlta, nCompacto);
 
   const v = new THREE.Vector3();
   let ancho = 1;
@@ -85,7 +89,24 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
   // escrituras durante el parallax, donde muchos rótulos están quietos en su ranura.
   const ultimo = rig.piezas.map(() => ({ pts: '', tr: '', op: '', r: '', og: '' }));
 
-  // Única lectura de layout de todo el módulo, y solo al redimensionar.
+  // EL <b> MÁS ANCHO DE CADA BANDA en compacto (0 = alta, 1 = baja), en px. Ahí arranca el codo
+  // de sus guías (ver PM.rotulos.aireCodo): es la única manera de que la diagonal nazca FUERA de
+  // todo el texto de la banda. Se lee del DOM cuando la capa se destapa —con [hidden] los rects
+  // son 0x0— y al redimensionar estando abierta; nueve rects, dos veces por visita al capítulo.
+  const anchoBanda = [0, 0];
+  function medirTextos(): void {
+    if (!compacto || capa.hidden) return;
+    anchoBanda[0] = anchoBanda[1] = 0;
+    for (let i = 0; i < titulos.length; i++) {
+      const r = ranuraCompacta[i];
+      if (r < 0) continue;
+      const w = titulos[i].getBoundingClientRect().width;
+      const b = r < mitad ? 0 : 1;
+      if (w > anchoBanda[b]) anchoBanda[b] = w;
+    }
+  }
+
+  // Lecturas de layout de todo el módulo: esta, al redimensionar, y medirTextos() al destaparse.
   function medir(): void {
     const r = host.getBoundingClientRect();
     ancho = Math.max(1, r.width);
@@ -93,6 +114,7 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
     compacto = ancho < PM.rotulos.anchoCompacto;
     capa.classList.toggle('compacto', compacto);
     svg.setAttribute('viewBox', `0 0 ${ancho} ${alto}`);
+    medirTextos();
   }
   medir();
 
@@ -105,10 +127,9 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
       if (visible) { capa.hidden = true; visible = false; }
       return;
     }
-    if (!visible) { capa.hidden = false; visible = true; }
+    if (!visible) { capa.hidden = false; visible = true; medirTextos(); }
 
     const porLado = Math.max(nIzq, nDer);
-    const mitad = Math.min(PM.rotulos.enBandaAlta, nCompacto);
     for (let i = 0; i < rig.piezas.length; i++) {
       const pieza = rig.piezas[i];
       const ranuraI = compacto ? ranuraCompacta[i] : ranura[i];
@@ -150,22 +171,30 @@ export function montarRotulos(rig: Rig, estado: Estado, host: HTMLElement): Rotu
       // el extremo lejano, la diagonal salía por detrás del rótulo y cruzaba por delante del
       // bloque de texto entero: se veía la diagonal de "Paneles radiadores" rozando la nota de
       // "Estructura de empuje".
-      const cx = bx - lado * ancho * PM.rotulos.codo;
+      // EN COMPACTO el codo va al borde del <b> más ancho de la banda más un aire, y la raya
+      // horizontal NO pasa por el centro del rótulo sino a `raya` px de él, por debajo en la banda
+      // alta y por encima en la baja (mismo signo `-lado`): en columna la raya corre entre el
+      // título y la nota, pero en compacto la nota está oculta y la raya cruzaba el título, y la
+      // diagonal, naciendo dentro del texto, tachaba los rótulos de debajo (ver PM.rotulos).
+      const cx = compacto
+        ? bx - lado * (anchoBanda[lado < 0 ? 0 : 1] + PM.rotulos.aireCodo)
+        : bx - lado * ancho * PM.rotulos.codo;
+      const ly = compacto ? by - lado * PM.rotulos.raya : by;
 
       // 3) la guía se dibuja recortándola por longitud de arco con el mismo escalar.
       //    Nada de stroke-dasharray: el trazado cambia de forma cada frame (la pieza gira), así que
       //    habría que recalcular getTotalLength() en cada uno. Recortar los puntos es exacto y gratis.
       const d = Math.min(1, t / PM.rotulos.dibujo);
-      const l1 = Math.hypot(cx - ax, by - ay);
+      const l1 = Math.hypot(cx - ax, ly - ay);
       const l2 = Math.abs(bx - cx);
       const hasta = d * (l1 + l2);
       let pts: string;
       if (hasta <= l1) {
         const k = l1 > 0.001 ? hasta / l1 : 0;
-        pts = `${ax.toFixed(1)},${ay.toFixed(1)} ${(ax + (cx - ax) * k).toFixed(1)},${(ay + (by - ay) * k).toFixed(1)}`;
+        pts = `${ax.toFixed(1)},${ay.toFixed(1)} ${(ax + (cx - ax) * k).toFixed(1)},${(ay + (ly - ay) * k).toFixed(1)}`;
       } else {
         const k = l2 > 0.001 ? (hasta - l1) / l2 : 1;
-        pts = `${ax.toFixed(1)},${ay.toFixed(1)} ${cx.toFixed(1)},${by.toFixed(1)} ${(cx + (bx - cx) * k).toFixed(1)},${by.toFixed(1)}`;
+        pts = `${ax.toFixed(1)},${ay.toFixed(1)} ${cx.toFixed(1)},${ly.toFixed(1)} ${(cx + (bx - cx) * k).toFixed(1)},${ly.toFixed(1)}`;
       }
       if (pts !== u.pts) lineas[i].setAttribute('points', u.pts = pts);
       // La guía se ATENÚA con el mismo escalar. Sin esto, al recogerse el rótulo el texto ya era

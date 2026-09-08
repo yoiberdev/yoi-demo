@@ -1,10 +1,10 @@
 import {
-  AmbientLight, Color, DirectionalLight, DoubleSide, Group, HemisphereLight, InstancedMesh, Matrix4,
-  LineBasicMaterial, MeshBasicMaterial, MeshLambertMaterial, Object3D, OrthographicCamera, PointLight,
+  AmbientLight, Color, DirectionalLight, DoubleSide, Group, InstancedMesh, Matrix4,
+  LineBasicMaterial, MeshBasicMaterial, MeshToonMaterial, Object3D, OrthographicCamera, PointLight,
   Quaternion, Scene, Vector3, type Material,
 } from 'three';
 import { PM } from '../params-motor';
-import { aplicarTema, crearMotor, calidad as calidadGeometria, M, type Calidad, type Motor } from './geometria';
+import { aplicarTema, crearMotor, calidad as calidadGeometria, M, ponerFilo, type Calidad, type Motor } from './geometria';
 
 // EL CONTRATO ENTRE LA GEOMETRÍA Y LA COREOGRAFÍA
 // ===============================================================================================
@@ -14,11 +14,13 @@ import { aplicarTema, crearMotor, calidad as calidadGeometria, M, type Calidad, 
 //
 // Jerarquía, y el porqué de cada nivel:
 //   escena
-//     └ desvio      <- SOLO el desvío de la galería, escrito en absoluto desde aplicar(). Va por
-//                      ENCIMA de `raiz` porque es un desplazamiento de ENCUADRE (unidades de
-//                      pantalla, ajeno a la escala del objeto) y porque su valor depende del
-//                      tamaño del lienzo, que la timeline no conoce: en un móvil de pie no hay
-//                      3,2 u de sitio a los lados y el hueco hay que hacerlo arriba.
+//     └ desvio      <- SOLO la composición de ENCUADRE (posición y escala), escrita en absoluto
+//                      desde aplicar(): el desvío de la galería y, en un cuadro de pie, el sitio
+//                      que el motor deja a la tarjeta y a las bandas de rótulos. Va por ENCIMA de
+//                      `raiz` porque es un ajuste de pantalla, ajeno a la escala del objeto, y
+//                      porque su valor depende del tamaño del lienzo, que la timeline no conoce:
+//                      en un móvil de pie no hay 3,2 u de sitio a los lados y el hueco hay que
+//                      hacerlo arriba.
 //         └ raiz        <- lo ÚNICO que anima la timeline maestra (x, y, rotateX, rotateY, scale)
 //             └ sacudida <- SOLO el temblor del encendido, escrito en absoluto desde aplicar()
 //             └ centrado <- offset fijo: el motor está construido con la garganta en y=0 y su
@@ -50,8 +52,12 @@ export interface TuboRig { z: number }
 export interface Rig {
   escena: Scene;
   camara: OrthographicCamera;
-  /** Desvío de encuadre de la galería. Lo escribe `aplicar()` en absoluto, nunca la timeline. */
+  /** Composición de encuadre (desvío de la galería, sitio en vertical): posición y escala las
+   *  escribe `aplicar()` en absoluto, nunca la timeline. */
   desvio: Group;
+  /** Tamaño CSS del lienzo, el de la última llamada a `disponer()`: la composición vertical mide
+   *  sus filas de texto en píxeles y necesita pasarlos a unidades de motor. */
+  medida: { ancho: number; alto: number };
   raiz: Group;
   sacudida: Group;
   motor: Motor;
@@ -71,7 +77,7 @@ export interface Rig {
   /** Materiales PROPIOS de la marca (clones): así el apagado del resto no la toca. */
   materialesMarca: Material[];
   /** Los tres del monograma, que además se auto-iluminan cuando la marca manda. */
-  emisivosMarca: MeshLambertMaterial[];
+  emisivosMarca: MeshToonMaterial[];
   /** La chapa de soporte del monograma: se desvanece cuando la marca viene al frente (si no, al
    *  escalarse ocupa media pantalla y tapa el motor: sería una marca de agua). */
   chapaMarca: Material[];
@@ -79,8 +85,9 @@ export interface Rig {
   turbina: Object3D;
   luzClave: DirectionalLight;
   luzCamara: PointLight;
-  /** Materiales que laten en la galería y se ponen al rojo en el encendido. */
-  emisivos: MeshLambertMaterial[];
+  /** Materiales que laten en la galería y se ponen al rojo en el encendido. La coreografía les
+   *  funde `color` y `emissive` hacia el acento vigente (ver coreografia.ts, el acento). */
+  emisivos: MeshToonMaterial[];
   /** El inserto de garganta, sin iluminar: es el único modo de que la garganta "arda" sin postpro. */
   caliente: MeshBasicMaterial;
   /** Plano de salida de la campana, en unidades de motor: de ahí cuelga el penacho. */
@@ -132,20 +139,21 @@ export function construirRig(nivel: Calidad): Rig {
   for (const clave of ['blanco', 'medio', 'oscuro', 'acento', 'linea', 'silueta', 'caliente'] as const) {
     cuerpos.push(transparentar(motor.materiales[clave] as Material));
   }
-  const emisivos = [motor.materiales.acento as MeshLambertMaterial];
+  const emisivos = [motor.materiales.acento as MeshToonMaterial];
   const caliente = motor.materiales.caliente as MeshBasicMaterial;
 
   // -------------------------------------------------------------------------------------------
-  // LUCES. No van dentro de `raiz`: si giraran con el motor, el sombreado plano no cambiaría al
-  // girar y el objeto se leería como un dibujo, no como un volumen.
+  // LUCES. UNA clave direccional, y nada más (informe BRECHA, fila 8): el toon de tres tonos solo
+  // sabe de una dirección de luz, y cada luz de más (el contraluz, el hemisferio y el ambiente de
+  // antes) sumaba su propio degradado encima de los tres escalones. El filo cálido del lado en
+  // sombra va en el shader (geometria.ts, ponerFilo), no en una luz. No va dentro de `raiz`: si
+  // girara con el motor, el sombreado no cambiaría al girar y el objeto se leería como un dibujo.
   // -------------------------------------------------------------------------------------------
   const luzClave = new DirectionalLight(0xffffff, PM.motor.luzClave);
-  luzClave.position.set(5, 8, 6);
-  const luzBorde = new DirectionalLight(0xffe6bd, PM.motor.luzBorde);
-  luzBorde.position.set(-6, 1, -5);
-  const hemisferio = new HemisphereLight(0xbcd2ff, 0x1a1a18, PM.motor.hemisferio);
-  const ambiente = new AmbientLight(0xffffff, PM.motor.ambiente);
-  escena.add(luzClave, luzBorde, hemisferio, ambiente);
+  luzClave.position.set(...PM.motor.luzDesde);
+  escena.add(luzClave);
+  // Solo si el número no es cero: con el toon, el escalón de sombra ya evita el negro.
+  if (PM.motor.ambiente > 0) escena.add(new AmbientLight(0xffffff, PM.motor.ambiente));
 
   // La luz del encendido va DENTRO de sacudida: tiembla y sube con el motor.
   const luzCamara = new PointLight(new Color(M.paleta.acento), 0, 14, 2);
@@ -241,7 +249,7 @@ export function construirRig(nivel: Calidad): Rig {
   // un logotipo no se sombrea.
   const marca = motor.piezas.placa ?? new Group();
   const materialesMarca: Material[] = [];
-  const emisivosMarca: MeshLambertMaterial[] = [];
+  const emisivosMarca: MeshToonMaterial[] = [];
   const chapaMarca: Material[] = [];
   const lineasMarca: LineBasicMaterial[] = [];
   marca.traverse((o) => {
@@ -252,11 +260,14 @@ export function construirRig(nivel: Calidad): Rig {
     // La placa lleva materiales CLONADOS, así que el repintado por tema no la alcanzaría: sus
     // aristas se quedarían con la tinta del tema oscuro en el capítulo claro. Se apuntan aquí.
     if (o.name.startsWith('aristas-')) lineasMarca.push(clon as LineBasicMaterial);
-    const lam = clon as MeshLambertMaterial;
-    if (lam.isMeshLambertMaterial) {
-      lam.emissive = lam.color.clone();
-      lam.emissiveIntensity = 0;
-      emisivosMarca.push(lam);
+    const toon = clon as MeshToonMaterial;
+    if (toon.isMeshToonMaterial) {
+      // `clone()` copia el gradiente (la misma textura: el tema le llega igual) pero NO el
+      // `onBeforeCompile`: sin esto la placa saldría sin filo y con otro programa.
+      ponerFilo(toon);
+      toon.emissive = toon.color.clone();
+      toon.emissiveIntensity = 0;
+      emisivosMarca.push(toon);
     }
     con.material = clon;
     materialesMarca.push(clon);
@@ -270,13 +281,26 @@ export function construirRig(nivel: Calidad): Rig {
     for (const mat of lineasMarca) mat.color.copy(motor.materiales.linea.color);
   }
 
+  const medida = { ancho: 1, alto: 1 };
   function disponer(ancho: number, alto: number): void {
-    let h = PM.motor.encuadre / 2;
-    let w = h * (ancho / Math.max(1, alto));
-    // Una ortográfica fija el ALTO; en un móvil de pie el ancho resultante no da para el motor.
-    if (w < PM.motor.anchoMin / 2) {
-      h *= (PM.motor.anchoMin / 2) / w;
-      w = PM.motor.anchoMin / 2;
+    medida.ancho = Math.max(1, ancho);
+    medida.alto = Math.max(1, alto);
+    // EL ENCUADRE. `encuadre` es el alto nominal, y el objeto entero (PM.motor.medioAncho /
+    // medioAlto) tiene que caber con `margen` de aire a cada lado EN LOS DOS EJES, sea cual sea el
+    // aspecto. Una ortográfica fija el alto y el ancho lo pone el aspecto: en apaisado sobra ancho
+    // y manda `encuadre` (4,1 > 3,35 / 0,88: aquí no cambia nada); en un móvil de pie el ancho no
+    // llega y el encuadre se abre lo JUSTO para que el motor quepa con su aire —no hasta un ancho
+    // fijo, que en un iPhone 13 dejaba el motor en el 70 % del ancho con el 47 % del alto vacío—.
+    // En la galería y en el despiece, en vertical, el sitio para la tarjeta y los rótulos no sale
+    // de aquí sino de la composición (coreografia.ts, `desvio`): el encuadre es el de HERO_OUT.
+    const aspecto = medida.ancho / medida.alto;
+    const util = 1 - 2 * PM.motor.margen;   // 0,88: lo que el objeto puede ocupar de cada eje
+    let h = Math.max(PM.motor.encuadre / 2, PM.motor.medioAlto / util);
+    let w = h * aspecto;
+    const wMin = PM.motor.medioAncho / util;
+    if (w < wMin) {
+      w = wMin;
+      h = w / aspecto;
     }
     camara.left = -w;
     camara.right = w;
@@ -291,7 +315,7 @@ export function construirRig(nivel: Calidad): Rig {
   }
 
   return {
-    escena, camara, desvio, raiz, sacudida, motor, piezas, sueltas, tubos, azimutes, aspas, marca, materialesMarca,
+    escena, camara, desvio, medida, raiz, sacudida, motor, piezas, sueltas, tubos, azimutes, aspas, marca, materialesMarca,
     emisivosMarca, chapaMarca, turbina, luzClave, luzCamara, emisivos, caliente, cuerpos,
     yLabio: -M.tobera.largo,
     escribirTubos, tema, disponer, liberar,

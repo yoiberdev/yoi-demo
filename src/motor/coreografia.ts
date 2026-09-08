@@ -1,6 +1,6 @@
-import { Color, MathUtils, Quaternion, Vector3, type Material, type MeshLambertMaterial, type Object3D } from 'three';
+import { Color, MathUtils, Quaternion, Vector3, type Material, type MeshToonMaterial, type Object3D } from 'three';
 import { PM } from '../params-motor';
-import { M } from './geometria';
+import { emisivoDelAcento, M } from './geometria';
 
 import type { Maestro, Tramo } from '../core/maestro';
 import type { Rig } from './rig';
@@ -32,6 +32,12 @@ import type { Rig } from './rig';
 //   · El ease por defecto de un hijo de timeline es `out(2)`; el maestro impone `inOut(3)` y
 //     `composition: 'none'`. Cuando la curva importa, va escrita.
 //   · Nada de `onComplete` / `onBegin` para cambiar de estado: con scrub no son simétricos.
+//
+// Y UNA EXCEPCIÓN A "TODO ES FUNCIÓN DEL MAESTRO", igual que la capa de vida: el ACENTO VIGENTE.
+// Lo decide la página (core/acento.ts) desde el reloj del maestro y avisa con 'yoi:acento' solo
+// cuando cambia; aquí se funde hacia él con el reloj del NAVEGADOR (PM.vida.acentoMs), porque un
+// cambio de color de 400 ms no es un recorrido que haya que poder deshacer a mitad: el color al
+// que se llega sí es función del maestro (lo es la decisión), el camino no. Ver `pintarAcento`.
 
 export interface Estado {
   luz: number;      // 0..1  factor sobre la intensidad de la luz clave
@@ -41,6 +47,7 @@ export interface Estado {
   rpm: number;      // 0..1  vueltas de la turbobomba
   logo: number;     // 0..1  la placa del monograma viene al frente
   aparta: number;   // 0..1  el motor se desvía para dejar hueco en la galería (dirección: aplicar)
+  abierto: number;  // 0..1  el despiece está abierto (COMO): en vertical le hace sitio entre las bandas de rótulos
   vibra: number;    // 0..1  amplitud del temblor previo al despegue
   penacho: number;  // 0..1  crecimiento del penacho
   estira: number;   // 0..1  estirado del penacho al salir
@@ -94,7 +101,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
 
   const estado: Estado = {
     luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0,
-    logo: 0, aparta: 0, vibra: 0, penacho: 0, estira: 0, salida: 0,
+    logo: 0, aparta: 0, abierto: 0, vibra: 0, penacho: 0, estira: 0, salida: 0,
     rotulos: rig.piezas.map(() => ({ t: 0 })),
   };
 
@@ -129,7 +136,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   const I = C.intro;
   tl.set(raiz, { x: 0, y: 0, rotateX: 0, rotateY: I.rotY[0], rotateZ: 0, scale: I.escala[0] }, 0)
     .set(cam, { zoom: I.zoom }, 0)
-    .set(estado, { luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0, logo: 0, aparta: 0, vibra: 0, penacho: 0, estira: 0, salida: 0 }, 0)
+    .set(estado, { luz: C.heroOut.luz[0], apagado: 0, pulso: 0, brillo: 0, rpm: 0, logo: 0, aparta: 0, abierto: 0, vibra: 0, penacho: 0, estira: 0, salida: 0 }, 0)
     .set(estado.rotulos, { t: 0 }, 0);
   for (const s of sitios) tl.set(s.p.obj, { x: s.entrada.x, y: s.entrada.y, z: s.entrada.z }, 0);
   for (const a of abanico) tl.set(a.o, { x: a.reposo.x, z: a.reposo.z }, 0);
@@ -176,6 +183,14 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     z: [I.coronaFuera, 0], duration: I.coronaDur, ease: `outBack(${I.coronaRebote})`,
     delay: reparto(I.coronaReparto, I.coronaDesde),
   }, tCorona);
+  // El último tubo tiene que estar QUIETO en GALERIA: el gesto acaba en tCorona + reparto + dur, y
+  // si eso cae dentro del capítulo la primera vista del motor montado lo pilla a mitad de rebote,
+  // con los tubos hundidos en la campana (fila 10, ronda 1: acababa en 7 355 con GALERIA en
+  // 7 100). Los números viven en PM.coreo.intro; esto solo avisa en desarrollo si alguien los
+  // vuelve a descuadrar.
+  if (import.meta.env.DEV && tCorona + I.coronaReparto + I.coronaDur > m.L.GALERIA) {
+    console.warn(`[motor] la corona acaba en ${tCorona + I.coronaReparto + I.coronaDur}, después de GALERIA (${m.L.GALERIA})`);
+  }
 
   // ============================================================ HERO_OUT: toma el centro
   const H = C.heroOut;
@@ -224,7 +239,10 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     rotateY: [yGal, yAbre], rotateX: [H.rotX[1], K.rotX], y: [0, K.bajar], x: [0, K.desplazar],
     duration: dur('COMO', K.abrir[0], K.abrir[1]), ease: 'inOut(2)',
   }, en('COMO', K.abrir[0]))
-    .add(cam, { zoom: [H.zoom[1], K.zoom], duration: dur('COMO', K.abrir[0], K.abrir[1]), ease: 'inOut(2)' }, en('COMO', K.abrir[0]));
+    .add(cam, { zoom: [H.zoom[1], K.zoom], duration: dur('COMO', K.abrir[0], K.abrir[1]), ease: 'inOut(2)' }, en('COMO', K.abrir[0]))
+    // `abierto` va con el zoom, ida y vuelta: es el escalar con el que la composición vertical le
+    // hace sitio al despiece entre las dos bandas de rótulos (ver aplicar(), punto 3c).
+    .add(estado, { abierto: [0, 1], duration: dur('COMO', K.abrir[0], K.abrir[1]), ease: 'inOut(2)' }, en('COMO', K.abrir[0]));
 
   // 2. separar: de arriba abajo, 70 ms entre pieza y pieza. `outQuint` sale disparada y aterriza
   //    sin rebote: es el gesto de "esto se desmonta", no el de "esto salta".
@@ -292,7 +310,8 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     // (captura esc-18). Con 0,06 de retraso las piezas van por delante del encuadre y no hay un
     // solo fotograma con nada tocando el borde.
     .add(raiz, { rotateY: [yPar, yFin], rotateX: [K.rotX, 0], y: [K.bajar, 0], x: [K.desplazar, 0], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06))
-    .add(cam, { zoom: [K.zoom, H.zoom[1]], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06));
+    .add(cam, { zoom: [K.zoom, H.zoom[1]], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06))
+    .add(estado, { abierto: [1, 0], duration: dur('COMO', K.recomponer[0] + 0.06, 1), ease: 'inOut(2)' }, en('COMO', K.recomponer[0] + 0.06));
 
   // ============================================================ CIERRE: encendido y salida
   const Z = C.cierre;
@@ -326,13 +345,49 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   const eMarca = rig.marca.scale.clone();
   // El tamaño se calcula cada fotograma porque depende del ZOOM: el encuadre efectivo es
   // encuadre/zoom, y en COMO el zoom vale 0,62. Con el encuadre a secas la marca salía a dos
-  // tercios del tamaño que le tocaba (comprobado en captura).
-  const marcaAlta = (): number => (PM.marca.alto * PM.motor.encuadre) / (cam.zoom * ALTO_MARCA);
+  // tercios del tamaño que le tocaba (comprobado en captura). El alto del cuadro se lee de la
+  // cámara y no de PM.motor.encuadre: en un móvil de pie el encuadre se abre (rig.ts) y la marca
+  // tiene que seguir siendo un tercio DE LO QUE SE VE. Y se divide por la escala de `desvio`: la
+  // placa cuelga del motor, que en vertical va encogido durante el despiece, y la marca no.
+  const marcaAlta = (): number => (PM.marca.alto * (cam.top - cam.bottom)) / (cam.zoom * ALTO_MARCA * rig.desvio.scale.x);
   const opacidad = new Map<Material, number>();
-  for (const mat of rig.cuerpos) opacidad.set(mat, (mat as MeshLambertMaterial).opacity ?? 1);
+  for (const mat of rig.cuerpos) opacidad.set(mat, (mat as MeshToonMaterial).opacity ?? 1);
   const emisivoBase = rig.emisivos.map((mat) => mat.emissiveIntensity);
   const colorFrio = rig.caliente.color.clone();
   const colorCaliente = new Color(0xfff3d6);
+
+  // ============================================================ EL ACENTO VIGENTE (fila 9)
+  // El contrato con la página: al montar se lee `--acento` del estilo computado de <html> (así da
+  // igual si el motor llega antes o después del primer cambio), y después se escucha 'yoi:acento'
+  // en `document`. Lo que sigue al acento: el color y el emisivo de los aros (rig.emisivos), la
+  // luz de cámara del encendido y el color frío del inserto de garganta. El emisivo no es el
+  // acento tal cual, es su versión saturada y oscura (geometria.ts, emisivoDelAcento) para que el
+  // latido no recorte a blanco.
+  const acento = new Color();        // el que se pinta AHORA (a mitad de fundido, uno intermedio)
+  const acentoDesde = new Color();
+  const acentoHasta = new Color();
+  let acentoT0 = -1;                 // reloj del navegador en que arrancó el fundido; -1 = quieto
+  const acentoOriginal = rig.emisivos.map((mat) => ({ color: mat.color.clone(), emissive: mat.emissive.clone() }));
+  const luzCamaraOriginal = rig.luzCamara.color.clone();
+  const leerAcento = (): string => getComputedStyle(document.documentElement).getPropertyValue('--acento').trim();
+  function pintarAcento(): void {
+    for (const mat of rig.emisivos) {
+      mat.color.copy(acento);
+      emisivoDelAcento(acento, mat.emissive);
+    }
+    rig.luzCamara.color.copy(acento);
+    colorFrio.copy(acento);
+  }
+  acento.set(leerAcento() || `#${new Color(M.paleta.acento).getHexString()}`);
+  pintarAcento();
+  const alCambiarAcento = (ev: Event): void => {
+    const color = (ev as CustomEvent<{ color?: string }>).detail?.color;
+    if (!color) return;
+    acentoDesde.copy(acento);
+    acentoHasta.set(color);
+    acentoT0 = performance.now();
+  };
+  document.addEventListener('yoi:acento', alCambiarAcento);
   // El rig le clona los materiales a la placa, así que este conjunto NO contiene los del resto
   // del motor y el apagado puede ser total sin tocar a la marca.
   const materialesMarca = new Set<Material>(rig.materialesMarca);
@@ -340,6 +395,16 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   let alfa = false;   // ¿están los cuerpos en la pasada transparente ahora mismo?
 
   function aplicar(tiempo: number, ahora: number): void {
+    // 0. El acento, si está a mitad de fundido. `ahora` es el sello del rAF, que puede ir unos ms
+    //    por detrás del performance.now() del evento: por eso el clamp por abajo. out(2), como
+    //    la transición CSS de los consumidores de la página.
+    if (acentoT0 >= 0) {
+      const k = MathUtils.clamp((ahora - acentoT0) / PM.vida.acentoMs, 0, 1);
+      acento.lerpColors(acentoDesde, acentoHasta, k * (2 - k));
+      if (k >= 1) acentoT0 = -1;
+      pintarAcento();
+    }
+
     // 1. La corona. Las 36 matrices salen de los 36 escalares que mueve la timeline.
     rig.escribirTubos();
 
@@ -367,26 +432,68 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     //     se calcula CADA FOTOGRAMA porque depende del encuadre: la cámara ortográfica fija el
     //     alto y el ancho lo pone el aspecto del lienzo, así que el sitio disponible cambia con la
     //     ventana y hasta al girar el teléfono. Reglas:
-    //       · en un cuadro apaisado el hueco se hace AL LADO (el objeto se va a la izquierda);
-    //       · en un cuadro de pie no hay sitio a los lados y no lo habrá nunca, así que el objeto
-    //         SUBE y el hueco queda abajo, donde ya viven el rótulo de capítulo y la sub-nav;
-    //       · y en los dos casos el desplazamiento se recorta con la holgura de verdad, para que
-    //         la máquina no se salga del cuadro pase lo que pase.
+    //       · en un cuadro apaisado el hueco se hace AL LADO (el objeto se va a la izquierda) y el
+    //         desplazamiento se recorta con la holgura de verdad, para que la máquina no se salga
+    //         del cuadro pase lo que pase;
+    //       · en un cuadro de pie no hay sitio a los lados y no lo habrá nunca: la tarjeta va en
+    //         DOS FILAS (base.css) y el motor vive en la BANDA de entre medias, centrado en ella
+    //         y encogido lo justo si no cabe (PM.coreo.galeria.vertical, fila 16 del informe).
+    //         Antes subía 2,6 u a secas y el título y la captura se escribían encima (medido:
+    //         28 y 53 px de solape en un iPhone 13).
+    //     La banda se mide en PÍXELES CSS desde los bordes (son filas de texto a tamaño fijo) y se
+    //     pasa a unidades con el alto del lienzo que guarda el rig: en un teléfono alto lo que
+    //     sobra va al motor. La ESCALA de `desvio` es el otro escritor único de este bloque: la
+    //     timeline escala `raiz`, la composición escala `desvio`, y se multiplican.
+    //     "De pie" es EXACTAMENTE lo que dice la hoja de estilos (@media (max-aspect-ratio: 1/1)
+    //     en base.css), alto >= ancho: era `alto > 1,15 · ancho`, y entre los dos umbrales (una
+    //     ventana de 900x1000, por ejemplo) la tarjeta ya iba en dos filas mientras el motor se
+    //     apartaba a la izquierda, encima de las dos. Los dos lados tienen que decidir con la
+    //     misma regla o el reparto no existe. El aspecto se lee del lienzo (rig.medida), que es
+    //     lo que evalúa la media query, no del frustum: el zoom no cambia el aspecto, pero así
+    //     no depende de que el encuadre lo respete.
     const A = estado.aparta;
+    const B = estado.abierto;
+    const anchoVis = (cam.right - cam.left) / cam.zoom;
+    const altoVis = (cam.top - cam.bottom) / cam.zoom;
+    const vertical = rig.medida.alto >= rig.medida.ancho;
+    let dx = 0;
+    let dy = 0;
+    let escalaDesvio = 1;
     if (A > 0.0005) {
-      const anchoVis = (cam.right - cam.left) / cam.zoom;
-      const altoVis = (cam.top - cam.bottom) / cam.zoom;
       const g = PM.coreo.galeria;
-      const semiX = PM.motor.medioAncho * g.escala + g.margenApartar;
-      const semiY = PM.motor.medioAlto * g.escala + g.margenApartar;
-      if (altoVis > anchoVis * 1.15) {
-        rig.desvio.position.set(0, Math.min(g.apartar, Math.max(0, altoVis / 2 - semiY)) * A, 0);
+      if (vertical) {
+        const V = g.vertical;
+        const uPorPx = altoVis / rig.medida.alto;
+        const bandaIni = altoVis / 2 - V.arriba * uPorPx;            // borde alto de la banda (y hacia arriba)
+        const bandaFin = -altoVis / 2 + V.abajo * uPorPx;            // borde bajo
+        const bandaAlto = Math.max(0.1, (bandaIni - bandaFin) * (1 - 2 * V.margen));
+        const altoMotor = 2 * PM.motor.medioAlto * g.escala;
+        const k = Math.min(1, bandaAlto / altoMotor);
+        dy += ((bandaIni + bandaFin) / 2) * A;
+        escalaDesvio -= (1 - k) * A;
       } else {
-        rig.desvio.position.set(-Math.min(g.apartar, Math.max(0, anchoVis / 2 - semiX)) * A, 0, 0);
+        const semiX = PM.motor.medioAncho * g.escala + g.margenApartar;
+        dx -= Math.min(g.apartar, Math.max(0, anchoVis / 2 - semiX)) * A;
       }
-    } else {
-      rig.desvio.position.set(0, 0, 0);
     }
+    // 3c. EL DESPIECE EN VERTICAL. En compacto los rótulos van en dos bandas, arriba y abajo
+    //     (rotulos.ts), y con el encuadre abierto de un móvil de pie el despiece a zoom 0,58 se
+    //     metía debajo de la banda alta (su anillo de bancada subía hasta los 83 px del iPhone).
+    //     Se centra entre las dos bandas y se encoge a lo que quepa (PM.coreo.como.vertical), con
+    //     el escalar `abierto` que va y vuelve con el zoom del capítulo. Los rótulos se proyectan
+    //     con la cámara cada fotograma, así que siguen a sus piezas sin enterarse.
+    //     Solo cuando las bandas EXISTEN: rotulos.ts las monta por debajo de PM.rotulos.anchoCompacto
+    //     de ancho, así que aquí se pregunta lo mismo (un cuadro de pie de 950 px de ancho lleva
+    //     los rótulos en columnas y no hay nada a lo que hacer sitio).
+    const compacto = rig.medida.ancho < PM.rotulos.anchoCompacto;
+    if (B > 0.0005 && vertical && compacto) {
+      const V = PM.coreo.como.vertical;
+      const k = Math.min(1, (V.alto * altoVis) / PM.coreo.como.altoDespiece);
+      dy += (0.5 - V.centro) * altoVis * B;
+      escalaDesvio -= (1 - k) * B;
+    }
+    rig.desvio.position.set(dx, dy, 0);
+    rig.desvio.scale.setScalar(escalaDesvio);
 
     // 4. La marca. Se lleva al espacio de la cámara: se toma el centro del conjunto en MUNDO, se
     //    adelanta hacia la cámara y se trae al espacio del padre de la placa. Definida en el
@@ -480,6 +587,11 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
   }
 
   function revertir(): void {
+    document.removeEventListener('yoi:acento', alCambiarAcento);
+    acentoT0 = -1;
+    rig.emisivos.forEach((mat, i) => { mat.color.copy(acentoOriginal[i].color); mat.emissive.copy(acentoOriginal[i].emissive); });
+    rig.luzCamara.color.copy(luzCamaraOriginal);
+    colorFrio.copy(luzCamaraOriginal);
     if (alfa) {
       alfa = false;
       for (const mat of rig.cuerpos) { mat.transparent = false; mat.needsUpdate = true; }
@@ -493,6 +605,7 @@ export function montarCoreografia(m: Maestro, rig: Rig): Coreografia {
     rig.sacudida.position.set(0, 0, 0);
     rig.sacudida.rotation.set(0, 0, 0);
     rig.desvio.position.set(0, 0, 0);
+    rig.desvio.scale.setScalar(1);
   }
 
   const objetivos: object[] = [
